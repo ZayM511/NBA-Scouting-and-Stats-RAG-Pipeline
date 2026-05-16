@@ -1,0 +1,114 @@
+# --- Secrets ---
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*-credentials.json
+service-account*.json
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+*.egg
+MANIFEST
+.installed.cfg
+
+# --- uv / virtualenv ---
+.venv/
+venv/
+env/
+ENV/
+
+# --- Testing ---
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+
+# --- Type checking ---
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+
+# --- Linting / formatting ---
+.ruff_cache/
+
+# --- IDE ---
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+
+# --- OS ---
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# --- Docker ---
+docker/data/
+docker/postgres-data/
+
+# --- Project data ---
+data/raw/
+data/interim/
+data/staging/
+data/cache/
+
+# --- Scratch / playground ---
+scratch/
+playground/
+*.log
+/tmp/
+
+# --- Node (UI phase) ---
+node_modules/
+.next/
+out/
+.turbo/
+.vercel/
+*.tsbuildinfo
+
+# --- Playwright (browser binaries are global) ---
+test-results/
+playwright-report/
+playwright/.cache/
+
+# --- Notebook checkpoints ---
+.ipynb_checkpoints/
+
+# --- Local Claude state (if any tools write here) ---
+.claude/local/
+.claude/state/

@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-mcp.json",
+  "_comment_servers": {
+    "playwright":    "Browser automation. Microsoft's official @playwright/mcp.",
+    "jam":           "Bug capture + dev context (console, network, repro). Jam.dev hosted MCP.",
+    "filesystem":    "Scoped read/write to repo root and /tmp. Anthropic reference server.",
+    "github":        "Repo, issues, PRs. GitHub's official server. Token via env var.",
+    "postgres":      "READ-ONLY query access to the project DB. Community server.",
+    "shadcn":        "Browse/install shadcn/ui v4 components by natural-language prompt.",
+    "brave-search":  "Find recent NBA articles during prose ingestion + playoff dev work."
+  },
+  "_credential_policy": "Every credential below is a ${env:VAR} reference. Never inline tokens. The block-secrets.sh hook will reject any commit that does.",
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"]
+    },
+    "jam": {
+      "type": "http",
+      "url": "https://mcp.jam.dev/mcp"
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "${CLAUDE_PROJECT_DIR}",
+        "/tmp"
+      ]
+    },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${env:GITHUB_TOKEN}"
+      }
+    },
+    "postgres": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres",
+        "${env:POSTGRES_READONLY_URL}"
+      ]
+    },
+    "shadcn": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@jpisnice/shadcn-ui-mcp-server",
+        "--framework",
+        "react"
+      ],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${env:GITHUB_TOKEN}"
+      }
+    },
+    "brave-search": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+      "env": {
+        "BRAVE_API_KEY": "${env:BRAVE_API_KEY}"
+      }
+    }
+  }
+}
