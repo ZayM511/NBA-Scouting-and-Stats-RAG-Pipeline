@@ -8,6 +8,13 @@ interface Props {
 
 export function HybridPanel({ hybrid, citedChunkIds = [] }: Props) {
   const f = hybrid.filter;
+  // Defensive defaults: older API responses cached in client state may not
+  // include rows / column_names / row_count (those landed in Phase L.4).
+  const rows = f.rows ?? [];
+  const cols = f.column_names ?? [];
+  const rowCount = f.row_count ?? rows.length;
+  const playerIds = f.player_ids ?? [];
+  const params = f.params ?? {};
   return (
     <div className="space-y-3">
       <section className="space-y-2">
@@ -17,16 +24,16 @@ export function HybridPanel({ hybrid, citedChunkIds = [] }: Props) {
         <pre className="overflow-x-auto rounded-md bg-zinc-900 p-2 text-[11px] leading-5 text-zinc-100">
           <code>{f.sql}</code>
         </pre>
-        {Object.keys(f.params).length > 0 && (
+        {Object.keys(params).length > 0 && (
           <pre className="overflow-x-auto rounded-md bg-zinc-900 p-2 text-[11px] leading-5 text-zinc-100">
-            <code>{JSON.stringify(f.params, null, 2)}</code>
+            <code>{JSON.stringify(params, null, 2)}</code>
           </pre>
         )}
-        {f.rows.length > 0 && <ResultsTable rows={f.rows} cols={f.column_names} />}
+        {rows.length > 0 && <ResultsTable rows={rows} cols={cols} />}
         <div className="text-xs text-zinc-700 dark:text-zinc-300">
-          {f.row_count} row{f.row_count === 1 ? "" : "s"}, narrowed prose to{" "}
-          <span className="font-mono">{f.player_ids.length}</span> player
-          {f.player_ids.length === 1 ? "" : "s"}.
+          {rowCount} row{rowCount === 1 ? "" : "s"}, narrowed prose to{" "}
+          <span className="font-mono">{playerIds.length}</span> player
+          {playerIds.length === 1 ? "" : "s"}.
         </div>
         {f.explanation && <div className="text-xs text-zinc-500">{f.explanation}</div>}
       </section>
