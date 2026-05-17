@@ -204,10 +204,10 @@ def _origins() -> list[str]:
     raw = os.environ.get("ALLOWED_ORIGINS", "")
     if raw.strip():
         return [o.strip() for o in raw.split(",") if o.strip()]
-    return [
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ]
+    # Next.js dev server falls forward through 3000..3009 when ports are busy,
+    # so the allowlist covers the range to keep `npm run dev` painless.
+    ports = range(3000, 3010)
+    return [f"http://{host}:{p}" for host in ("localhost", "127.0.0.1") for p in ports]
 
 
 app = FastAPI(

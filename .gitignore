@@ -80,6 +80,9 @@ desktop.ini
 # --- Docker ---
 docker/data/
 docker/postgres-data/
+# pg_dump output files (used as a local backup when moving the project; too large to commit)
+docker/*.sql.gz
+docker/nbarag-dump.sql
 
 # --- Project data ---
 data/raw/

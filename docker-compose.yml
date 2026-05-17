@@ -4,6 +4,12 @@
 # Bring it up:    docker compose up -d
 # Bring it down:  docker compose down
 # Reset volumes:  docker compose down -v   (destroys data!)
+#
+# Project name and volume name are pinned so the data survives moving the
+# repo to a different parent directory. Without these, docker-compose would
+# derive the volume name from the cwd folder name.
+
+name: nbarag
 
 services:
   postgres:
@@ -32,4 +38,5 @@ services:
 
 volumes:
   postgres-data:
+    name: nbarag_postgres_data
     driver: local
