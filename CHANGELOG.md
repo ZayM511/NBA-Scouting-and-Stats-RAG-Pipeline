@@ -4,6 +4,69 @@ All notable changes to this project land here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+### Phase C — Top-30 enrichment (Opus-authored scouting summaries) (2026-05-17)
+
+One Opus 4.7 scouting summary per top-30 player, stored as `articles_chunks` rows with `article_type='authored_summary'`. The summaries surface naturally through the existing hybrid retrieval (BM25 + dense + Cohere Rerank), so any prose or hybrid question that touches a top-30 player gets richer context.
+
+**Added**
+
+- `src/normalize_entities/generate_summaries.py` — Typer CLI: `generate`, `status`. For each `is_top30 = TRUE` player:
+  1. Pulls the player's 2025-26 stat line (PPG / RPG / APG / SPG / BPG / TS% / +/-, games, playoff games).
+  2. Pulls up to 8 existing corpus chunks mentioning that player (filters out other authored summaries to avoid feedback loops on re-run).
+  3. Asks Claude Opus 4.7 to write a 450-550 word scouting summary covering: verdict headline, offensive strengths, defensive strengths, limitations, 2025-26 role + playoff context, notable trends.
+  4. Stores as one row in `articles` (article_type='authored_summary') and one row in `articles_chunks` with the contextual-retrieval prefix and a fresh Voyage embedding so it participates in retrieval like any other chunk.
+- Per-player session_id (`ingest-summaries-<player_id>`) so the per-session cost ceiling doesn't trip across the batch run; the hourly circuit breaker still applies.
+- ASCII-safe console printing so cp1252 Windows terminals don't crash on names with diacritics (Dončić, Jokić, Sengün).
+- Idempotent: re-running skips players that already have an authored summary unless `--force` is passed.
+
+**Cost + wall time for the full top-30 run**
+
+| Metric | Value |
+|---|---|
+| Players covered | 30 / 30 |
+| Total cost | **$3.72** |
+| Wall time | ~13 minutes (sequential Opus calls) |
+| Average per summary | $0.124 (Opus 4.7) |
+| Average length | 2,994 characters (~470 words) |
+
+**Eval A/B vs the baseline** (re-ran the full 30-case eval as `top30-enriched`)
+
+| Metric | Baseline | Top-30 enriched | Δ |
+|---|---:|---:|---:|
+| **Route accuracy** | **1.000** | **1.000** | 0 |
+| Hallucination guard | 1.000 | 1.000 | 0 |
+| Keyword recall | 0.939 | 0.928 | −0.011 |
+| **LLM-judge (overall)** | 0.488 | **0.550** | **+0.062** |
+| **Aggregate** | **0.857** | **0.869** | **+0.012** |
+
+Per-route judge scores:
+
+| Route | Baseline | Top-30 enriched | Δ |
+|---|---:|---:|---:|
+| stats | 0.250 | 0.250 | 0 (expected — summaries don't affect the SQL path) |
+| prose | 0.625 | **0.685** | **+0.060** |
+| **hybrid** | **0.590** | **0.715** | **+0.125** |
+
+The biggest lift is on hybrid (+0.125 on the judge). That tracks: hybrid first narrows the player set via SQL, then needs prose that's specifically about each narrowed player — exactly where the authored summaries help. Prose route gains too (+0.060). Stats unchanged, as designed.
+
+**Sample summary (Victor Wembanyama, 2,953 chars)**
+
+> Victor Wembanyama is no longer a prospect or a curiosity — he's the best two-way center in basketball and the gravitational center of a Spurs team that just punched its ticket to the Western Conference Finals.
+>
+> Offensively, Wembanyama has fully integrated the skill set that made him a unicorn in theory into something terrifying in practice. He's a 7'4" hub who can initiate from the elbow, snake into pull-up middies, finish lobs, and step out to bury threes off movement. [...] The efficiency numbers tell the story: a 24.4-point scoring average on .624 true shooting is absurd volume-efficiency math for a primary option [...]
+>
+> [Defense + limitations + 2025-26 season + Spurs franchise infrastructure paragraphs follow.]
+
+The model used the stat line for the numbers (24.4 PPG, .624 TS, 3.2 BPG, +10.9 plus/minus, 74 games) and the corpus for the storyline (the elbow incident, Castle hitting playoff threes, Harper bench energy, Spurs dispatching Minnesota in 5).
+
+**Cost run-down for the A/B**
+
+- Baseline eval: $1.94
+- Top-30 enriched eval: $2.26 (higher because the synthesis prompts are reading more chunks per question)
+- Total Phase C spend including summary generation: $3.72 + $2.26 = **$5.98**
+
+---
+
 ### Phase I — Eval set (30 cases, all three routes) (2026-05-17)
 
 First end-to-end measurement. 30 hand-crafted NBA questions, stratified 10 stats / 10 prose / 10 hybrid. Each case carries an expected route, optional `must_mention` / `must_not_mention` substring checks, and a per-case rubric the LLM-as-judge uses. Composite score is the average of four components: route accuracy (deterministic), keyword recall (deterministic), hallucination guard (deterministic), and an LLM-as-judge score (Sonnet 4.6 reading the rubric + the actual answer).
