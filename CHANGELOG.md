@@ -4,6 +4,64 @@ All notable changes to this project land here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+### Phase B.8 — Real corpus ingested (2026-05-17)
+
+After lifting the Voyage free-tier rate cap (added a payment method on the dashboard; pay-as-you-go from the existing free balance), ran two ingests in parallel from Reddit.
+
+**Corpus state**
+
+| Source | Articles | Chunks |
+|---|---:|---:|
+| r/nba (top of month) | 100 | 151 |
+| r/Thunder (top of month) | 30 | 38 |
+| r/NBASpurs (top of month) | 30 | 31 |
+| r/NYKnicks (top of month) | 30 | 30 |
+| r/clevelandcavs (partial — Reddit 429) | 7 | 7 |
+| **Total** | **197** | **257** |
+
+Both the r/nba run (49,572 embedding tokens, ~$0.009) and the team-subs run completed under three minutes each. The team-subs run hit a Reddit 429 mid-way through r/clevelandcavs (Reddit's 60 req/min IP cap, separate from Voyage). DetroitPistons and nbadiscussion didn't get processed; trivial to add in a follow-up.
+
+**Bug found and fixed: false-positive aliases for common English words**
+
+The LLM alias step added `love` → Kevin Love, `green` → Jeff Green, `white` → Derrick White, `wolf` → Danny Wolf, and `black` → Anthony Black. These are common words and matched constantly in fan comments ("love that play", "green light", "in the black"). Result: Kevin Love appeared in 60 chunks despite barely being mentioned by name.
+
+Fix: deleted those 5 aliases from `player_aliases`, then re-ran the entity resolver on all 257 existing chunks and `UPDATE`d their `player_ids` column. No re-embedding needed (the vectors themselves are correct; only the filter column needed correcting).
+
+Post-cleanup top mentions (real signal, not artifacts):
+
+```
+46  SAS   Victor Wembanyama
+35  LAL   LeBron James
+31  CHA   LaMelo Ball
+24  WAS   Trae Young
+22  CLE   James Harden
+21  OKC   Shai Gilgeous-Alexander
+16  NYK   Mitchell Robinson
+14  GSW   Stephen Curry
+12  NYK   Karl-Anthony Towns
+12  PHI   Joel Embiid
+```
+
+**Sample retrievals (after cleanup)**
+
+| Query | Top match (similarity) | Why it's the right hit |
+|---|---|---|
+| `"Wemby's defensive impact at the rim"` | 0.55 — r/nba 2026-04-27, Wemby/Castle/Clingan defensive sequence | Spurs defensive set with Wemby in the role |
+| `"Cooper Flagg's rookie season"` | 0.51 — r/nba 2026-04-27, "Cooper Flagg has won the 2025-26 Rookie of the Year award" | ROY announcement |
+| `"playoff fatigue in the Western Conference"` | 0.54 — r/nba 2026-05-05, Wolves-Nuggets elimination thread | "DENVER NUGGETS HAVE BEEN ELIMINATED" |
+| `"Harden trade to Cleveland"` | 0.65 — r/clevelandcavs 2026-04-21, Cavs Big 3 thread | Direct mention |
+| `"LeBron at age 41"` | 0.65 — r/nba 2026-05-06, "41 years old LeBron James checks out: 27 PTS" | Box-score thread |
+
+**HNSW activation**: `EXPLAIN ANALYZE` still shows Seq Scan at 257 chunks (correct planner choice at this scale; query still completes in <1ms). The HNSW index is in place and will become the preferred path automatically once the corpus crosses ~1000+ chunks. Index correctness is verified by the schema migration test in `tests/schema/test_migration_discovery.py`.
+
+**Known follow-ups**
+
+- DetroitPistons and r/nbadiscussion didn't ingest (Reddit 429 partway through team-subs run). Trivial to re-run with `--sub DetroitPistons --sub nbadiscussion` once we want them.
+- An orphan-article row exists from the earlier rate-limit smoke test (article inserted, embedding failed → no chunks). Not load-bearing for retrieval. Cleanup is a one-liner if it becomes noisy.
+- The alias-cleanup pass is now ad-hoc. A small `src/normalize_entities/clean_aliases.py` script would let us repeat it deterministically if more false-positives surface.
+
+---
+
 ### Phase B.1–B.6 — Prose ingestion pipeline shipped (2026-05-16)
 
 End-to-end prose ingestion landed: Reddit JSON → entity resolution → chunking → contextual-retrieval prefix → Voyage embedding → Postgres pgvector. The 5-document smoke test verified every stage works correctly against live data.
