@@ -10,8 +10,9 @@ license = { text = "MIT" }
 dependencies = [
     # Anthropic (Claude) for router, SQL gen, synthesis
     "anthropic>=0.40.0",
-    # Voyage AI for embeddings
-    "voyageai>=0.3.0",
+    # Voyage AI for embeddings (called via REST in src/ingest_prose/embedder.py;
+    # we don't import the voyageai SDK because it fails to import on Python 3.14
+    # due to a pydantic-v1 + min_items issue in its multimodal_embeddings module).
     # Cohere for reranking
     "cohere>=5.11.0",
     # NBA stats data

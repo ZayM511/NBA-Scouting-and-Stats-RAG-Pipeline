@@ -4,6 +4,42 @@ All notable changes to this project land here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+### Phase B.1–B.6 — Prose ingestion pipeline shipped (2026-05-16)
+
+End-to-end prose ingestion landed: Reddit JSON → entity resolution → chunking → contextual-retrieval prefix → Voyage embedding → Postgres pgvector. The 5-document smoke test verified every stage works correctly against live data.
+
+**Added**
+
+- `src/normalize_entities/resolve.py` — `AliasResolver` loads the alias map into memory once and resolves `set[int]` of player_ids from raw text via greedy longest-match-first n-gram scanning. Handles diacritics (Dončić → doncic), apostrophes (D'Angelo Russell), hyphens (Karl-Anthony Towns), and possessives (Curry's → Curry). 25 unit tests.
+- `src/ingest_prose/chunker.py` — recursive token-based splitter, 400-token target with 15% overlap by default. Recursion order: paragraph → line → sentence → word → hard-cut. Uses tiktoken cl100k_base for counting. 14 unit tests.
+- `src/ingest_prose/contextual_prefix.py` — pure function that builds the contextual-retrieval prefix per chunk: `"Article from {source}, {date}, about {comma_separated_players}: {chunk_text}"`. Handles missing fields, dedupes names, collapses long player lists to "and N others". 10 unit tests.
+- `src/ingest_prose/embedder.py` — Voyage AI REST wrapper (does NOT use the `voyageai` SDK because it currently fails to import on Python 3.14 due to a pydantic-v1 + `min_items` issue in its multimodal-embeddings module). Batches up to 128 texts per call, retries on 429 / 5xx, distinguishes document vs query input_type for the asymmetric Voyage models.
+- `src/ingest_prose/reddit_source.py` — public-JSON ingester (no OAuth per Plan B). Pulls listing + comments per thread, builds the body as `title + selftext + top comments`, respects the 60 req/min rate limit. Validates that the User-Agent isn't a placeholder. 11 unit tests.
+- `src/ingest_prose/db.py` — idempotent UPSERTs for `articles` and `articles_chunks`. Article-level skip when content_sha256 matches the stored row. On content change, deletes old chunks and inserts new ones (cascade-safe). Uses `pgvector.psycopg.register_vector` so vectors round-trip as Python lists.
+- `src/ingest_prose/pipeline.py` — `ingest_document` orchestrator: upsert article → resolve players from full body → chunk → per-chunk player re-resolution → bulk name lookup → contextual prefix per chunk → one batched Voyage call → replace chunks → audit log. Structured `IngestResult` with status `ingested | unchanged | empty | error`.
+- `src/ingest_prose/cli.py` — Typer CLI with `reddit` and `status` commands. `--per-doc-sleep-seconds 25` for Voyage free-tier users (caps at 3 RPM).
+
+**Removed**
+
+- `voyageai` dep in `pyproject.toml`. We call the Voyage REST endpoint directly instead. Saves ~30 MB of transitive deps and fixes Python 3.14 compatibility.
+
+**Smoke test results (5 r/nba top-of-week threads):**
+
+- 4 of 5 ingested successfully (~12 chunks total). The 5th hit Voyage's free-tier 3 RPM rate limit (no payment method on the account). Adding a card on the Voyage dashboard removes the cap (pay-as-you-go from the existing free balance).
+- Entity resolution caught the right players: the Wemby flagrant thread resolved Wembanyama + Naz Reid; the LeBron sweep thread caught LeBron + Dillon Brooks; the Spurs moment-of-silence thread caught Brandon Clarke + Jason Collins.
+- Vector search verification: the query *"flagrant foul ejection"* returned the Wemby flagrant chunk first at 0.60 similarity, well clear of the next match at 0.45.
+- EXPLAIN at the current scale uses Seq Scan (only 12 chunks); HNSW will activate once we cross several hundred chunks.
+
+**Known issues / follow-ups**
+
+- Voyage free-tier rate limit slows full-corpus ingest to ~150 docs/hour. Adding a payment method removes this.
+- OneDrive sync occasionally locks `.venv` files mid-install. Workaround for re-syncing: `uv sync --link-mode=copy` and `uv run --no-sync` for routine test runs. Long-term fix: move the project outside OneDrive.
+- An article whose embedding call fails leaves an orphan `articles` row with zero chunks. Not load-bearing for retrieval (no chunks means no candidates returned) but worth cleaning up in Phase B.7 if we keep noticing it.
+
+**62 new tests; 123/123 total passing.**
+
+---
+
 ### Phase A.2 — Player alias map populated (2026-05-16)
 
 **Added**
