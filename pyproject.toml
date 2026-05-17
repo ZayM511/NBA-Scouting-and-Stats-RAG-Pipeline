@@ -41,6 +41,9 @@ dependencies = [
     # CLI ergonomics
     "typer>=0.15.0",
     "rich>=13.9.0",
+    # HTTP API for the Next.js UI
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
 ]
 
 [dependency-groups]
