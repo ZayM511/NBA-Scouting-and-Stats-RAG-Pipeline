@@ -87,6 +87,9 @@ data/interim/
 data/staging/
 data/cache/
 
+# --- Eval results (per-run JSONL artifacts; the aggregate numbers live in CHANGELOG) ---
+eval_results/
+
 # --- Scratch / playground ---
 scratch/
 playground/
