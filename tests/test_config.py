@@ -23,10 +23,13 @@ def test_settings_secrets_are_secret_str() -> None:
 
 
 def test_settings_missing_required_key_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Drop the env var AND tell pydantic to ignore the .env file so the
+    # check actually tests "the key is missing." Otherwise the developer's
+    # local .env shadows the test.
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     get_settings.cache_clear()
     with pytest.raises(Exception):  # pydantic ValidationError
-        Settings()  # type: ignore[call-arg]
+        Settings(_env_file=None)  # type: ignore[call-arg]
 
 
 def test_settings_overrides_via_env(monkeypatch: pytest.MonkeyPatch) -> None:
