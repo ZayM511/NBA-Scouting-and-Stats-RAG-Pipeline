@@ -4,6 +4,44 @@ All notable changes to this project land here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+### Phase D — Query router (2026-05-17)
+
+The router classifies a natural-language NBA question into one of three retrieval routes: `stats` (text-to-SQL on Postgres), `prose` (vector search on `articles_chunks`), or `hybrid` (SQL filter then vector search inside the filtered set).
+
+**Added**
+
+- `src/router/prompts.py` — system prompt, `classify_route` tool schema (Anthropic tool use for guaranteed structured output), and 14 few-shot examples stratified across the three routes (4 stats, 4 prose, 3 hybrid, 3 tricky edge cases).
+- `src/router/classifier.py` — `RouterClassifier` wraps Claude Sonnet 4.6 with `tool_choice={"type":"tool","name":"classify_route"}` so every call MUST return a valid `{route, reasoning}` payload. Goes through `src.guardrails.guarded_call`, so token caps + cost ceiling + circuit breaker all apply. Validates the route enum and raises `RouterError` on bad input.
+- `src/router/cli.py` — Typer CLI: `classify "<question>"`, `smoke` (built-in 14-question evaluation set), `batch <file>` (one question per line).
+- `tests/router/test_classifier.py` — 13 unit tests covering the tool schema, the few-shot scaffolding, the `_extract_tool_input` helper, and the classifier's input validation paths (mocked Anthropic client so tests don't hit the network).
+
+**Live smoke-test result**
+
+Ran the built-in 14-question set against Claude Sonnet 4.6:
+
+| Bucket | Score |
+|---|---|
+| stats | 5 / 5 |
+| prose | 5 / 5 |
+| hybrid | 4 / 4 |
+| **Total** | **14 / 14 (100%)** |
+
+Cost for the full smoke set: **$0.143** (about $0.01 per classification). Sonnet 4.6 prompt-cache integration is a clear Phase D follow-up to cut this 5-10x — the system prompt and the 14 few-shot examples are stable across calls, so cache hits will dominate.
+
+**Why tool use over JSON-in-prose**
+
+The early sketch returned `{"route": ..., "reasoning": ...}` as raw JSON in the model's text response. That works most of the time and breaks loudly when the model wraps the JSON in prose or adds trailing commas. Tool use with a typed schema and forced `tool_choice` removes the parsing failure mode entirely. The schema also doubles as inline documentation for the route enum.
+
+**Known follow-ups**
+
+- Add prompt caching on the system prompt + few-shot prefix. Should drop the per-call cost from $0.01 to about $0.001.
+- A/B test Haiku 4.5 against the same smoke set. If Haiku hits 12+/14, switch the default and cut cost by another 5x. Sonnet stays as the fallback in the model cascade for anything Haiku declines.
+- Extend the smoke set to ~30 questions to match the planned Braintrust eval size. Stratification target stays 10/10/10.
+
+**13 new tests; 136 total passing.**
+
+---
+
 ### Phase B.8 — Real corpus ingested (2026-05-17)
 
 After lifting the Voyage free-tier rate cap (added a payment method on the dashboard; pay-as-you-go from the existing free balance), ran two ingests in parallel from Reddit.
