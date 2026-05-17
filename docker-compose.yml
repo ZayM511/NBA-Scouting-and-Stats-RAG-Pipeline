@@ -36,6 +36,24 @@ services:
       timeout: 5s
       retries: 10
 
+  # Browser-based Postgres UI for inspection / screenshots.
+  # Reach it at http://localhost:8080 once docker compose up -d completes.
+  # Login is pre-filled via environment vars below.
+  adminer:
+    image: adminer:5
+    container_name: nbarag-adminer
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+      ADMINER_DEFAULT_DRIVER: pgsql
+      ADMINER_DEFAULT_DB: nbarag
+      ADMINER_DESIGN: dracula
+
 volumes:
   postgres-data:
     name: nbarag_postgres_data

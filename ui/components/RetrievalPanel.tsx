@@ -1,4 +1,5 @@
 import type { RetrievalOut } from "@/lib/api";
+import { cn } from "@/lib/cn";
 
 interface Props {
   retrieval: RetrievalOut;
@@ -9,10 +10,10 @@ export function RetrievalPanel({ retrieval, citedChunkIds = [] }: Props) {
   const cited = new Set(citedChunkIds);
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-3 gap-2 text-xs">
+      <div className="grid grid-cols-3 gap-2">
         <Stat label="BM25" value={retrieval.bm25_count} />
         <Stat label="Dense" value={retrieval.dense_count} />
-        <Stat label="Merged" value={retrieval.merged_count} />
+        <Stat label="Merged" value={retrieval.merged_count} accent />
       </div>
       <div className="space-y-2">
         {retrieval.chunks.map((c, i) => {
@@ -21,20 +22,33 @@ export function RetrievalPanel({ retrieval, citedChunkIds = [] }: Props) {
             <div
               key={c.chunk_id}
               id={`chunk-${c.chunk_id}`}
-              className={
-                "rounded-md border p-2 text-xs " +
-                (isCited
-                  ? "border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/40"
-                  : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900")
-              }
+              className={cn(
+                "rounded-xl border p-2.5 text-xs transition-colors",
+                isCited
+                  ? "border-[rgba(255,106,31,0.40)] bg-[rgba(255,106,31,0.06)]"
+                  : "hairline bg-surface-2/60 hover:bg-surface-2",
+              )}
             >
-              <div className="mb-1 flex items-center justify-between gap-2 text-[10px] uppercase tracking-wide text-zinc-500">
-                <span className="font-mono">
-                  #{i + 1} · chunk {c.chunk_id} · {c.source}
+              <div className="mb-1.5 flex items-center justify-between gap-2 text-[10px] uppercase tracking-wider">
+                <span className="font-mono text-text-dim">
+                  #{i + 1} · chunk {c.chunk_id} ·{" "}
+                  <span className="text-text-muted">{c.source}</span>
                 </span>
-                <span className="font-mono">{c.score.toFixed(3)}</span>
+                <span
+                  className="rounded-md px-1.5 py-0.5 font-mono"
+                  style={{
+                    background: isCited
+                      ? "rgba(255,106,31,0.15)"
+                      : "rgba(255,255,255,0.05)",
+                    color: isCited ? "#ffb380" : "#a1a1aa",
+                  }}
+                >
+                  {c.score.toFixed(3)}
+                </span>
               </div>
-              <p className="line-clamp-4 text-zinc-700 dark:text-zinc-300">{c.text}</p>
+              <p className="line-clamp-4 text-[12.5px] leading-5 text-text-muted">
+                {c.text}
+              </p>
             </div>
           );
         })}
@@ -43,11 +57,35 @@ export function RetrievalPanel({ retrieval, citedChunkIds = [] }: Props) {
   );
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
+function Stat({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: number;
+  accent?: boolean;
+}) {
   return (
-    <div className="rounded-md bg-zinc-100 p-2 text-center dark:bg-zinc-900">
-      <div className="text-[10px] uppercase tracking-wide text-zinc-500">{label}</div>
-      <div className="font-mono text-sm text-zinc-900 dark:text-zinc-100">{value}</div>
+    <div
+      className={cn(
+        "rounded-xl border p-2 text-center",
+        accent
+          ? "border-[rgba(255,106,31,0.30)] bg-[rgba(255,106,31,0.06)]"
+          : "hairline bg-surface-2/60",
+      )}
+    >
+      <div className="text-[9px] uppercase tracking-[0.16em] text-text-dim">
+        {label}
+      </div>
+      <div
+        className={cn(
+          "mt-0.5 font-mono text-sm",
+          accent ? "text-[#ffb380]" : "text-text",
+        )}
+      >
+        {value}
+      </div>
     </div>
   );
 }

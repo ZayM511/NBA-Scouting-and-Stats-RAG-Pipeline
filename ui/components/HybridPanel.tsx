@@ -1,3 +1,5 @@
+import { Filter, Search } from "lucide-react";
+import { cn } from "@/lib/cn";
 import type { HybridOut } from "@/lib/api";
 import { RetrievalPanel } from "./RetrievalPanel";
 
@@ -15,40 +17,44 @@ export function HybridPanel({ hybrid, citedChunkIds = [] }: Props) {
   const rowCount = f.row_count ?? rows.length;
   const playerIds = f.player_ids ?? [];
   const params = f.params ?? {};
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <section className="space-y-2">
-        <h4 className="text-[10px] uppercase tracking-wide text-zinc-500">
-          Numeric half · SQL
-        </h4>
-        <pre className="overflow-x-auto rounded-md bg-zinc-900 p-2 text-[11px] leading-5 text-zinc-100">
+        <StepHeader index={1} icon={<Filter className="h-3 w-3" />} title="Numeric half · SQL" />
+        <pre className="overflow-x-auto rounded-xl border hairline bg-[#08080c] p-3 text-[11.5px] leading-5 text-[#e4e4e7] font-mono">
           <code>{f.sql}</code>
         </pre>
         {Object.keys(params).length > 0 && (
-          <pre className="overflow-x-auto rounded-md bg-zinc-900 p-2 text-[11px] leading-5 text-zinc-100">
+          <pre className="overflow-x-auto rounded-xl border hairline bg-[#08080c] p-3 text-[11.5px] leading-5 text-[#e4e4e7] font-mono">
             <code>{JSON.stringify(params, null, 2)}</code>
           </pre>
         )}
         {rows.length > 0 && <ResultsTable rows={rows} cols={cols} />}
-        <div className="text-xs text-zinc-700 dark:text-zinc-300">
-          {rowCount} row{rowCount === 1 ? "" : "s"}, narrowed prose to{" "}
-          <span className="font-mono">{playerIds.length}</span> player
+        <div className="rounded-xl border hairline bg-surface-2/60 px-3 py-2 text-xs text-text-muted">
+          <span className="font-mono text-[#ffb380]">{rowCount}</span>{" "}
+          row{rowCount === 1 ? "" : "s"}, narrowed prose to{" "}
+          <span className="font-mono text-[#ffb380]">{playerIds.length}</span> player
           {playerIds.length === 1 ? "" : "s"}.
+          {f.explanation && (
+            <div className="mt-1.5 text-text-dim">{f.explanation}</div>
+          )}
         </div>
-        {f.explanation && <div className="text-xs text-zinc-500">{f.explanation}</div>}
       </section>
 
       {hybrid.retrieval && (
-        <section className="space-y-2 border-t border-zinc-200 pt-3 dark:border-zinc-800">
-          <h4 className="text-[10px] uppercase tracking-wide text-zinc-500">
-            Qualitative half · Prose (filtered to those players)
-          </h4>
+        <section className="space-y-2 border-t hairline pt-3">
+          <StepHeader
+            index={2}
+            icon={<Search className="h-3 w-3" />}
+            title="Qualitative half · Prose (filtered to those players)"
+          />
           <RetrievalPanel retrieval={hybrid.retrieval} citedChunkIds={citedChunkIds} />
         </section>
       )}
 
       {hybrid.notes && (
-        <div className="rounded-md bg-amber-50 px-2 py-1.5 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+        <div className="rounded-xl border border-[rgba(251,191,36,0.25)] bg-[rgba(251,191,36,0.06)] px-3 py-2 text-xs text-[#fcd34d]">
           {hybrid.notes}
         </div>
       )}
@@ -56,15 +62,52 @@ export function HybridPanel({ hybrid, citedChunkIds = [] }: Props) {
   );
 }
 
-function ResultsTable({ rows, cols }: { rows: Record<string, unknown>[]; cols: string[] }) {
+function StepHeader({
+  index,
+  icon,
+  title,
+}: {
+  index: number;
+  icon: React.ReactNode;
+  title: string;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <span
+        className="inline-flex h-5 w-5 items-center justify-center rounded-md text-[10px] font-mono font-semibold"
+        style={{
+          background: "rgba(167,139,250,0.14)",
+          color: "#c4b5fd",
+          boxShadow: "inset 0 0 0 1px rgba(167,139,250,0.30)",
+        }}
+      >
+        {index}
+      </span>
+      <span className="text-[10px] uppercase tracking-[0.18em] text-text-muted inline-flex items-center gap-1.5">
+        {icon} {title}
+      </span>
+    </div>
+  );
+}
+
+function ResultsTable({
+  rows,
+  cols,
+}: {
+  rows: Record<string, unknown>[];
+  cols: string[];
+}) {
   const columns = cols.length > 0 ? cols : Object.keys(rows[0] ?? {});
   return (
-    <div className="overflow-x-auto rounded-md border border-zinc-200 dark:border-zinc-800">
-      <table className="w-full text-left text-[11px]">
-        <thead className="bg-zinc-100 dark:bg-zinc-900">
+    <div className="overflow-x-auto rounded-xl border hairline bg-surface-2/60">
+      <table className="w-full text-left text-[11.5px]">
+        <thead className="border-b hairline bg-surface-3/60">
           <tr>
             {columns.map((c) => (
-              <th key={c} className="px-2 py-1.5 font-medium text-zinc-700 dark:text-zinc-300">
+              <th
+                key={c}
+                className="px-2.5 py-2 font-medium uppercase tracking-wider text-[10px] text-text-muted"
+              >
                 {c}
               </th>
             ))}
@@ -74,13 +117,13 @@ function ResultsTable({ rows, cols }: { rows: Record<string, unknown>[]; cols: s
           {rows.slice(0, 25).map((row, i) => (
             <tr
               key={i}
-              className="border-t border-zinc-100 odd:bg-white even:bg-zinc-50 dark:border-zinc-800 dark:odd:bg-zinc-900 dark:even:bg-zinc-950"
+              className={cn(
+                "border-t hairline transition-colors hover:bg-[rgba(255,255,255,0.03)]",
+                i % 2 === 1 && "bg-[rgba(255,255,255,0.015)]",
+              )}
             >
               {columns.map((c) => (
-                <td
-                  key={c}
-                  className="px-2 py-1 font-mono text-zinc-800 dark:text-zinc-200"
-                >
+                <td key={c} className="px-2.5 py-1.5 font-mono text-text">
                   {fmt(row[c])}
                 </td>
               ))}
@@ -94,8 +137,6 @@ function ResultsTable({ rows, cols }: { rows: Record<string, unknown>[]; cols: s
 
 function fmt(v: unknown): string {
   if (v === null || v === undefined) return "—";
-  if (typeof v === "number") {
-    return Number.isInteger(v) ? String(v) : v.toFixed(3);
-  }
+  if (typeof v === "number") return Number.isInteger(v) ? String(v) : v.toFixed(3);
   return String(v);
 }

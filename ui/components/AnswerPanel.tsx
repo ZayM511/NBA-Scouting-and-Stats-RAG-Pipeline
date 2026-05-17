@@ -1,4 +1,5 @@
 import { Fragment } from "react";
+import { Sparkles } from "lucide-react";
 import type { CitationOut } from "@/lib/api";
 
 interface Props {
@@ -7,30 +8,29 @@ interface Props {
   declined?: boolean;
 }
 
-// Inline citation pattern Claude is instructed to emit, e.g. "...he scored [^3]"
 const CITATION_RE = /\[\^(\d+)\]/g;
 
 export function AnswerPanel({ answer, citations, declined }: Props) {
   const byIdx = new Map(citations.map((c) => [c.citation_index, c.chunk_id]));
 
-  // Split the answer text into runs so each [^N] becomes a styled marker.
-  // We keep this rendering deliberately simple — no markdown parser, just
-  // citation substitution. Paragraphs are split on double newlines.
   return (
     <div className="space-y-3">
       {declined && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+        <div className="flex items-start gap-2 rounded-xl border border-[rgba(251,191,36,0.25)] bg-[rgba(251,191,36,0.06)] px-3 py-2 text-sm text-[#fcd34d]">
+          <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           The model declined to answer with the available context.
         </div>
       )}
-      {answer.split(/\n{2,}/).map((para, pi) => (
-        <p
-          key={pi}
-          className="whitespace-pre-wrap text-sm leading-6 text-zinc-800 dark:text-zinc-200"
-        >
-          {renderCitations(para, byIdx)}
-        </p>
-      ))}
+      <div className="space-y-3">
+        {answer.split(/\n{2,}/).map((para, pi) => (
+          <p
+            key={pi}
+            className="whitespace-pre-wrap text-[14.5px] leading-7 text-text"
+          >
+            {renderCitations(para, byIdx)}
+          </p>
+        ))}
+      </div>
     </div>
   );
 }
@@ -49,7 +49,20 @@ function renderCitations(text: string, byIdx: Map<number, number>) {
         <a
           href={chunkId ? `#chunk-${chunkId}` : undefined}
           title={chunkId ? `chunk #${chunkId}` : "unknown chunk"}
-          className="ml-0.5 inline-block rounded bg-zinc-200 px-1 text-[10px] font-mono text-zinc-700 align-super no-underline hover:bg-zinc-300 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (chunkId) {
+              document
+                .getElementById(`chunk-${chunkId}`)
+                ?.scrollIntoView({ behavior: "smooth", block: "center" });
+            }
+          }}
+          className="ml-0.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-[5px] px-1 align-super text-[10px] font-mono font-medium no-underline transition-colors"
+          style={{
+            background: "rgba(255,106,31,0.14)",
+            color: "#ffb380",
+            boxShadow: "inset 0 0 0 1px rgba(255,106,31,0.35)",
+          }}
         >
           {n}
         </a>

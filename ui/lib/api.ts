@@ -1,7 +1,10 @@
 // Typed client for the FastAPI /ask endpoint. Shapes mirror src/api/server.py
 // AskResponse exactly.
 
-export type RouteName = "stats" | "prose" | "hybrid";
+// The first three correspond to API routes; "oracle" is a frontend-only
+// route used when oracleLore.ts intercepts a self-referential question and
+// short-circuits the pipeline.
+export type RouteName = "stats" | "prose" | "hybrid" | "oracle";
 
 export interface RouteOut {
   route: RouteName;
@@ -114,4 +117,107 @@ export async function getHealth(): Promise<{ status: string; db_ok: boolean; not
   const res = await fetch(`${API_URL}/health`);
   if (!res.ok) throw new Error(`GET /health ${res.status}`);
   return (await res.json()) as { status: string; db_ok: boolean; note: string };
+}
+
+// ---- Header endpoint ------------------------------------------------------
+
+export type HeaderMode = "season" | "upcoming" | "live" | "recap";
+
+export interface TeamMeta {
+  abbr: string;
+  city: string;
+  name: string;
+  conference: "East" | "West";
+  primary: string;
+  secondary: string;
+  arena: string;
+  arena_timezone: string;
+}
+
+export interface TeamLite {
+  abbr: string;
+  city: string;
+  name: string;
+  primary: string;
+  secondary: string;
+  conference: string;
+  record: string | null;
+}
+
+export type HeadlineCategory =
+  | "leaders"
+  | "scores"
+  | "upcoming"
+  | "awards"
+  | "facts"
+  | "divider";
+
+export interface Headline {
+  kind: "player" | "team" | "team-leader" | "note" | "divider";
+  label: string;
+  primary: string;
+  secondary: string;
+  metric: string;
+  tone: "ember" | "ice" | "emerald" | "violet" | "rose" | "amber";
+  team_abbr: string | null;
+  category?: HeadlineCategory | null;
+}
+
+export interface GameLeader {
+  name: string;
+  team_abbr: string;
+  line: string;
+}
+
+export interface RecentGame {
+  label: string;
+  date: string;
+  home: TeamLite;
+  away: TeamLite;
+  home_score: number;
+  away_score: number;
+  leaders: GameLeader[];
+  note: string | null;
+}
+
+export interface UpcomingGame {
+  label: string;
+  tipoff_utc: string;
+  arena: string;
+  arena_city: string;
+  arena_timezone: string;
+  home: TeamLite;
+  away: TeamLite;
+  series_state: string | null;
+  note: string | null;
+}
+
+export interface LiveGame {
+  label: string;
+  quarter: number;
+  clock: string;
+  home: TeamLite;
+  away: TeamLite;
+  home_score: number;
+  away_score: number;
+  leaders: GameLeader[];
+  highlight: string | null;
+}
+
+export interface HeaderPayload {
+  generated_at: string;
+  mode: HeaderMode;
+  headlines: Headline[];
+  recent: RecentGame | null;
+  upcoming: UpcomingGame | null;
+  live: LiveGame | null;
+  team_directory: Record<string, TeamMeta>;
+}
+
+export async function getHeader(
+  mode: "auto" | HeaderMode = "auto",
+): Promise<HeaderPayload> {
+  const res = await fetch(`${API_URL}/api/header?mode=${mode}`);
+  if (!res.ok) throw new Error(`GET /api/header ${res.status}`);
+  return (await res.json()) as HeaderPayload;
 }

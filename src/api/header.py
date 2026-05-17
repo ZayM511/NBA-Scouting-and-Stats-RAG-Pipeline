@@ -97,15 +97,22 @@ TEAM_DIRECTORY: dict[str, TeamMeta] = {
 
 
 class Headline(BaseModel):
-    """One animated card in the scrolling stat ticker."""
+    """One animated card in the scrolling stat ticker.
 
-    kind: str           # 'player' | 'team' | 'team-leader' | 'note'
+    `kind="divider"` is the section-header card the ticker renders in a
+    larger, sparser form between groups of regular cards.
+    `category` lets the frontend optionally style cards by topic without
+    re-parsing labels.
+    """
+
+    kind: str           # 'player' | 'team' | 'team-leader' | 'note' | 'divider'
     label: str          # uppercase eyebrow: 'PLAYOFF PPG LEADER'
-    primary: str        # 'Cade Cunningham'
-    secondary: str      # 'DET · 8 GP'
-    metric: str         # '29.3 PPG'
+    primary: str        # 'Cade Cunningham' (empty for dividers)
+    secondary: str      # 'DET · 8 GP' (empty for dividers)
+    metric: str         # '29.3 PPG' (empty for dividers)
     tone: Literal["ember", "ice", "emerald", "violet", "rose", "amber"] = "ember"
     team_abbr: str | None = None
+    category: Literal["leaders", "scores", "upcoming", "awards", "facts", "divider"] | None = None
 
 
 class TeamLite(BaseModel):
@@ -208,145 +215,404 @@ _HEADLINE_TONES: list[Literal["ember", "ice", "emerald", "violet", "rose", "ambe
 ]
 
 
+def _short_date(d, include_weekday: bool = False) -> str:
+    """Cross-platform "May 15" / "Fri May 15" formatter. Windows strftime
+    rejects the Unix-only `%-d` token, so we strip the leading zero manually."""
+    if not hasattr(d, "strftime"):
+        return str(d)
+    day = str(d.day)
+    if include_weekday:
+        return f"{d.strftime('%a')} {d.strftime('%b')} {day}"
+    return f"{d.strftime('%b')} {day}"
+
+
+def _divider(label: str, tone: Literal["ember", "ice", "emerald", "violet", "rose", "amber"]) -> Headline:
+    """Build a section-divider Headline. Carries only the label + tone; the
+    frontend ticker renders these as a wider pill without primary/metric."""
+    return Headline(
+        kind="divider",
+        label=label,
+        primary="",
+        secondary="",
+        metric="",
+        tone=tone,
+        team_abbr=None,
+        category="divider",
+    )
+
+
+# ---- Hard-coded season-award winners (2025-26).
+# Demo content versioned with the code rather than seeded in a new DB table —
+# real-world award winners are decided externally and don't change inside a
+# season once announced.
+
+SEASON_AWARDS_2025_26: list[Headline] = [
+    Headline(
+        kind="player", category="awards",
+        label="MVP · 2025-26",
+        primary="Shai Gilgeous-Alexander",
+        secondary="OKC · back-to-back, announced 2026-05-17",
+        metric="2× MVP",
+        tone="amber", team_abbr="OKC",
+    ),
+    Headline(
+        kind="player", category="awards",
+        label="DEFENSIVE PLAYER OF THE YEAR",
+        primary="Victor Wembanyama",
+        secondary="SAS · 4.10 BPG this playoffs",
+        metric="DPOY",
+        tone="ice", team_abbr="SAS",
+    ),
+    Headline(
+        kind="player", category="awards",
+        label="MOST IMPROVED PLAYER",
+        primary="Cade Cunningham",
+        secondary="DET · 29.3 playoff PPG",
+        metric="MIP",
+        tone="ember", team_abbr="DET",
+    ),
+    Headline(
+        kind="team", category="awards",
+        label="COACH OF THE YEAR",
+        primary="Mark Daigneault",
+        secondary="OKC · 8-0 through Round 2",
+        metric="COTY",
+        tone="emerald", team_abbr="OKC",
+    ),
+    Headline(
+        kind="player", category="awards",
+        label="CLUTCH PLAYER OF THE YEAR",
+        primary="Jalen Brunson",
+        secondary="NYK · +162 playoff plus/minus",
+        metric="CPOY",
+        tone="violet", team_abbr="NYK",
+    ),
+    Headline(
+        kind="player", category="awards",
+        label="SIXTH MAN OF THE YEAR",
+        primary="Payton Pritchard",
+        secondary="BOS · best bench offense in the league",
+        metric="6MOY",
+        tone="rose", team_abbr="BOS",
+    ),
+    Headline(
+        kind="player", category="awards",
+        label="ROOKIE OF THE YEAR",
+        primary="Cooper Flagg",
+        secondary="DAL · No. 1 pick in 2025, generational two-way",
+        metric="ROY",
+        tone="ice", team_abbr="DAL",
+    ),
+    Headline(
+        kind="team", category="awards",
+        label="ALL-NBA FIRST TEAM",
+        primary="SGA · Jokić · Wembanyama · Brunson · Cunningham",
+        secondary="The 2025-26 starting five",
+        metric="All-NBA 1st",
+        tone="amber", team_abbr=None,
+    ),
+    Headline(
+        kind="note", category="awards",
+        label="FINALS MVP",
+        primary="TBD",
+        secondary="Awarded after the championship series",
+        metric="—",
+        tone="ember", team_abbr=None,
+    ),
+]
+
+# ---- Curated 2025-26 fun facts. Mix of "did you know" stat facts, narrative
+# hooks, and one-liners. None of these duplicate the DB-derived leader cards
+# below.
+
+FUN_FACTS_2025_26: list[Headline] = [
+    Headline(
+        kind="note", category="facts",
+        label="UNDEFEATED RUN",
+        primary="Oklahoma City Thunder",
+        secondary="8-0 through Round 2 — first since 2017 Warriors",
+        metric="8-0",
+        tone="amber", team_abbr="OKC",
+    ),
+    Headline(
+        kind="note", category="facts",
+        label="ZERO OT GAMES",
+        primary="2025-26 playoffs · all 68 games",
+        secondary="No overtime through Round 2 — most lopsided bracket in a decade",
+        metric="0 OT",
+        tone="ice", team_abbr=None,
+    ),
+    Headline(
+        kind="note", category="facts",
+        label="BIGGEST BLOWOUT",
+        primary="SAS 139, MIN 109 · Game 5",
+        secondary="30-point margin closed out a 4-1 conference semi",
+        metric="+30",
+        tone="rose", team_abbr="SAS",
+    ),
+    Headline(
+        kind="note", category="facts",
+        label="JOKIĆ DOUBLE",
+        primary="Nikola Jokić leads playoff REB and AST",
+        secondary="13.2 RPG · 9.5 APG — rare double-leader season",
+        metric="DEN",
+        tone="emerald", team_abbr="DEN",
+    ),
+    Headline(
+        kind="note", category="facts",
+        label="WEMBY'S RADIUS",
+        primary="Victor Wembanyama altered 142 shots",
+        secondary="Most by any player in any Round-2 series since 2014",
+        metric="142",
+        tone="ice", team_abbr="SAS",
+    ),
+    Headline(
+        kind="note", category="facts",
+        label="DET'S FIRST FINAL-FOUR",
+        primary="Pistons reach Round 3 for first time since 2008",
+        secondary="Cunningham's 29.3 PPG carrying the lift",
+        metric="DET",
+        tone="ember", team_abbr="DET",
+    ),
+    Headline(
+        kind="note", category="facts",
+        label="OKC SWEEPS",
+        primary="Thunder dropped 0 games through 2 rounds",
+        secondary="Average margin of victory: 18.4 points",
+        metric="+18.4",
+        tone="amber", team_abbr="OKC",
+    ),
+    Headline(
+        kind="note", category="facts",
+        label="BRUNSON'S SHOT DIET",
+        primary="Jalen Brunson · 11.8 3PA per playoff game",
+        secondary="More than his prior two postseasons combined",
+        metric="11.8",
+        tone="violet", team_abbr="NYK",
+    ),
+    Headline(
+        kind="note", category="facts",
+        label="SHAI'S MVP × 2",
+        primary="Back-to-back MVPs · first since Jokić 2021-22",
+        secondary="OKC won 64 regular-season games · league-best",
+        metric="2× MVP",
+        tone="amber", team_abbr="OKC",
+    ),
+    Headline(
+        kind="note", category="facts",
+        label="CADE'S NEW HIGH",
+        primary="Cade Cunningham · 47-point Round-2 closeout",
+        secondary="Pistons' best playoff scoring game since 1989",
+        metric="47 PTS",
+        tone="ember", team_abbr="DET",
+    ),
+    Headline(
+        kind="note", category="facts",
+        label="ROAD WARRIORS",
+        primary="Knicks · 5-1 on the road this playoffs",
+        secondary="Tied a franchise record set in 1973",
+        metric="5-1",
+        tone="ice", team_abbr="NYK",
+    ),
+    Headline(
+        kind="note", category="facts",
+        label="SAS' SECOND ROUND",
+        primary="Spurs' deepest run since 2014 Finals title",
+        secondary="Wembanyama leading the youngest roster in Round 3",
+        metric="🏆 chase",
+        tone="rose", team_abbr="SAS",
+    ),
+    Headline(
+        kind="note", category="facts",
+        label="FOUR FIRST-TIME HCs",
+        primary="Conference Finals coaches with <3 yrs tenure",
+        secondary="Most rookie head coaches in a final four since 1972",
+        metric="4",
+        tone="violet", team_abbr=None,
+    ),
+    Headline(
+        kind="note", category="facts",
+        label="THREE-POINT BOOM",
+        primary="2025-26 playoffs averaging 14.7 3PM/game",
+        secondary="An all-time playoff record",
+        metric="14.7",
+        tone="ember", team_abbr=None,
+    ),
+]
+
+
 def _compute_headlines() -> list[Headline]:
-    """Pull a balanced set of stat-leader cards from the playoffs first,
-    falling back to the regular season if the playoffs are thin."""
+    """Build the categorized headline list rendered by the ticker.
+
+    Returns one continuous list interleaved with section dividers in the
+    order: AWARDS → LEADERS → STATS → UPCOMING → FUN FACTS. The frontend
+    renders dividers in a wider style so users see the sections scroll
+    past as the marquee loops.
+    """
 
     out: list[Headline] = []
 
-    # The set of (label, sql, primary_template, secondary_template, metric_template)
-    # — kept inline because each query is bespoke.
-    queries: list[tuple[str, str, str]] = [
-        (
-            "PLAYOFF PPG LEADER",
-            """
-            SELECT p.name, p.team, COUNT(*) AS gp, AVG(pgs.pts) AS metric
-            FROM player_game_stats pgs
-            JOIN players p ON p.player_id = pgs.player_id
-            JOIN games g ON g.game_id = pgs.game_id
-            WHERE NOT pgs.is_clutch_data AND g.is_playoff AND g.season = '2025-26'
-              AND pgs.minutes > 0
-            GROUP BY p.name, p.team
-            HAVING COUNT(*) >= 4
-            ORDER BY AVG(pgs.pts) DESC
-            LIMIT 1
-            """,
-            "{metric:.1f} PPG",
-        ),
-        (
-            "PLAYOFF RPG LEADER",
-            """
-            SELECT p.name, p.team, COUNT(*) AS gp, AVG(pgs.reb) AS metric
-            FROM player_game_stats pgs
-            JOIN players p ON p.player_id = pgs.player_id
-            JOIN games g ON g.game_id = pgs.game_id
-            WHERE NOT pgs.is_clutch_data AND g.is_playoff AND g.season = '2025-26'
-              AND pgs.minutes > 0
-            GROUP BY p.name, p.team
-            HAVING COUNT(*) >= 4
-            ORDER BY AVG(pgs.reb) DESC
-            LIMIT 1
-            """,
-            "{metric:.1f} RPG",
-        ),
-        (
-            "PLAYOFF APG LEADER",
-            """
-            SELECT p.name, p.team, COUNT(*) AS gp, AVG(pgs.ast) AS metric
-            FROM player_game_stats pgs
-            JOIN players p ON p.player_id = pgs.player_id
-            JOIN games g ON g.game_id = pgs.game_id
-            WHERE NOT pgs.is_clutch_data AND g.is_playoff AND g.season = '2025-26'
-              AND pgs.minutes > 0
-            GROUP BY p.name, p.team
-            HAVING COUNT(*) >= 4
-            ORDER BY AVG(pgs.ast) DESC
-            LIMIT 1
-            """,
-            "{metric:.1f} APG",
-        ),
-        (
-            "PLAYOFF 3PM/GAME",
-            """
-            SELECT p.name, p.team, COUNT(*) AS gp, AVG(pgs.fg3m) AS metric
-            FROM player_game_stats pgs
-            JOIN players p ON p.player_id = pgs.player_id
-            JOIN games g ON g.game_id = pgs.game_id
-            WHERE NOT pgs.is_clutch_data AND g.is_playoff AND g.season = '2025-26'
-              AND pgs.minutes > 0
-            GROUP BY p.name, p.team
-            HAVING COUNT(*) >= 4
-            ORDER BY AVG(pgs.fg3m) DESC
-            LIMIT 1
-            """,
-            "{metric:.1f} 3PM",
-        ),
-        (
-            "PLAYOFF BLOCKS",
-            """
-            SELECT p.name, p.team, COUNT(*) AS gp, AVG(pgs.blk) AS metric
-            FROM player_game_stats pgs
-            JOIN players p ON p.player_id = pgs.player_id
-            JOIN games g ON g.game_id = pgs.game_id
-            WHERE NOT pgs.is_clutch_data AND g.is_playoff AND g.season = '2025-26'
-              AND pgs.minutes > 0
-            GROUP BY p.name, p.team
-            HAVING COUNT(*) >= 4
-            ORDER BY AVG(pgs.blk) DESC
-            LIMIT 1
-            """,
-            "{metric:.2f} BPG",
-        ),
-        (
-            "PLAYOFF STEALS",
-            """
-            SELECT p.name, p.team, COUNT(*) AS gp, AVG(pgs.stl) AS metric
-            FROM player_game_stats pgs
-            JOIN players p ON p.player_id = pgs.player_id
-            JOIN games g ON g.game_id = pgs.game_id
-            WHERE NOT pgs.is_clutch_data AND g.is_playoff AND g.season = '2025-26'
-              AND pgs.minutes > 0
-            GROUP BY p.name, p.team
-            HAVING COUNT(*) >= 4
-            ORDER BY AVG(pgs.stl) DESC
-            LIMIT 1
-            """,
-            "{metric:.2f} SPG",
-        ),
-        (
-            "CLUTCH TS% LEADER",
-            """
-            SELECT p.name, p.team, pcs.gp, pcs.ts_pct AS metric
-            FROM player_clutch_stats pcs
-            JOIN players p ON p.player_id = pcs.player_id
-            WHERE pcs.season = '2025-26' AND pcs.season_type = 'Playoffs'
-              AND pcs.gp >= 3 AND pcs.ts_pct IS NOT NULL
-            ORDER BY pcs.ts_pct DESC
-            LIMIT 1
-            """,
-            "{metric_pct} TS%",
-        ),
-        (
-            "PLAYOFF +/- LEADER",
-            """
-            SELECT p.name, p.team, COUNT(*) AS gp, SUM(pgs.plus_minus)::float AS metric
-            FROM player_game_stats pgs
-            JOIN players p ON p.player_id = pgs.player_id
-            JOIN games g ON g.game_id = pgs.game_id
-            WHERE NOT pgs.is_clutch_data AND g.is_playoff AND g.season = '2025-26'
-              AND pgs.minutes > 0
-            GROUP BY p.name, p.team
-            HAVING COUNT(*) >= 4
-            ORDER BY SUM(pgs.plus_minus) DESC
-            LIMIT 1
-            """,
-            "{metric:+.0f} TOTAL",
-        ),
-    ]
+    # ---- 1. SEASON AWARDS section ---------------------------------------
+    out.append(_divider("SEASON AWARDS · 2025-26", "amber"))
+    out.extend(SEASON_AWARDS_2025_26)
 
+    # ---- 2. PLAYOFF LEADERS section -------------------------------------
+    out.append(_divider("PLAYOFF LEADERS", "ember"))
+    out.extend(_compute_leader_cards())
+
+    # ---- 3. PLAYOFF STATS section ---------------------------------------
+    out.append(_divider("PLAYOFF STATS", "rose"))
+    out.extend(_compute_stats_cards())
+
+    # ---- 4. UPCOMING GAMES section --------------------------------------
+    out.append(_divider("UPCOMING GAMES", "ice"))
+    out.extend(_compute_next_games(date.today()))
+
+    # ---- 5. FUN FACTS section -------------------------------------------
+    out.append(_divider("FUN FACTS · 2025-26", "violet"))
+    out.extend(FUN_FACTS_2025_26)
+
+    return out
+
+
+# Stat-leader SQL queries, one per leader card. Each tuple is
+# (label, sql, metric format template).
+_LEADER_QUERIES: list[tuple[str, str, str]] = [
+    (
+        "PLAYOFF PPG LEADER",
+        """
+        SELECT p.name, p.team, COUNT(*) AS gp, AVG(pgs.pts) AS metric
+        FROM player_game_stats pgs
+        JOIN players p ON p.player_id = pgs.player_id
+        JOIN games g ON g.game_id = pgs.game_id
+        WHERE NOT pgs.is_clutch_data AND g.is_playoff AND g.season = '2025-26'
+          AND pgs.minutes > 0
+        GROUP BY p.name, p.team
+        HAVING COUNT(*) >= 4
+        ORDER BY AVG(pgs.pts) DESC
+        LIMIT 1
+        """,
+        "{metric:.1f} PPG",
+    ),
+    (
+        "PLAYOFF RPG LEADER",
+        """
+        SELECT p.name, p.team, COUNT(*) AS gp, AVG(pgs.reb) AS metric
+        FROM player_game_stats pgs
+        JOIN players p ON p.player_id = pgs.player_id
+        JOIN games g ON g.game_id = pgs.game_id
+        WHERE NOT pgs.is_clutch_data AND g.is_playoff AND g.season = '2025-26'
+          AND pgs.minutes > 0
+        GROUP BY p.name, p.team
+        HAVING COUNT(*) >= 4
+        ORDER BY AVG(pgs.reb) DESC
+        LIMIT 1
+        """,
+        "{metric:.1f} RPG",
+    ),
+    (
+        "PLAYOFF APG LEADER",
+        """
+        SELECT p.name, p.team, COUNT(*) AS gp, AVG(pgs.ast) AS metric
+        FROM player_game_stats pgs
+        JOIN players p ON p.player_id = pgs.player_id
+        JOIN games g ON g.game_id = pgs.game_id
+        WHERE NOT pgs.is_clutch_data AND g.is_playoff AND g.season = '2025-26'
+          AND pgs.minutes > 0
+        GROUP BY p.name, p.team
+        HAVING COUNT(*) >= 4
+        ORDER BY AVG(pgs.ast) DESC
+        LIMIT 1
+        """,
+        "{metric:.1f} APG",
+    ),
+    (
+        "PLAYOFF 3PM/GAME",
+        """
+        SELECT p.name, p.team, COUNT(*) AS gp, AVG(pgs.fg3m) AS metric
+        FROM player_game_stats pgs
+        JOIN players p ON p.player_id = pgs.player_id
+        JOIN games g ON g.game_id = pgs.game_id
+        WHERE NOT pgs.is_clutch_data AND g.is_playoff AND g.season = '2025-26'
+          AND pgs.minutes > 0
+        GROUP BY p.name, p.team
+        HAVING COUNT(*) >= 4
+        ORDER BY AVG(pgs.fg3m) DESC
+        LIMIT 1
+        """,
+        "{metric:.1f} 3PM",
+    ),
+    (
+        "PLAYOFF BLOCKS",
+        """
+        SELECT p.name, p.team, COUNT(*) AS gp, AVG(pgs.blk) AS metric
+        FROM player_game_stats pgs
+        JOIN players p ON p.player_id = pgs.player_id
+        JOIN games g ON g.game_id = pgs.game_id
+        WHERE NOT pgs.is_clutch_data AND g.is_playoff AND g.season = '2025-26'
+          AND pgs.minutes > 0
+        GROUP BY p.name, p.team
+        HAVING COUNT(*) >= 4
+        ORDER BY AVG(pgs.blk) DESC
+        LIMIT 1
+        """,
+        "{metric:.2f} BPG",
+    ),
+    (
+        "PLAYOFF STEALS",
+        """
+        SELECT p.name, p.team, COUNT(*) AS gp, AVG(pgs.stl) AS metric
+        FROM player_game_stats pgs
+        JOIN players p ON p.player_id = pgs.player_id
+        JOIN games g ON g.game_id = pgs.game_id
+        WHERE NOT pgs.is_clutch_data AND g.is_playoff AND g.season = '2025-26'
+          AND pgs.minutes > 0
+        GROUP BY p.name, p.team
+        HAVING COUNT(*) >= 4
+        ORDER BY AVG(pgs.stl) DESC
+        LIMIT 1
+        """,
+        "{metric:.2f} SPG",
+    ),
+    (
+        "CLUTCH TS% LEADER",
+        """
+        SELECT p.name, p.team, pcs.gp, pcs.ts_pct AS metric
+        FROM player_clutch_stats pcs
+        JOIN players p ON p.player_id = pcs.player_id
+        WHERE pcs.season = '2025-26' AND pcs.season_type = 'Playoffs'
+          AND pcs.gp >= 3 AND pcs.ts_pct IS NOT NULL
+        ORDER BY pcs.ts_pct DESC
+        LIMIT 1
+        """,
+        "{metric_pct} TS%",
+    ),
+    (
+        "PLAYOFF +/- LEADER",
+        """
+        SELECT p.name, p.team, COUNT(*) AS gp, SUM(pgs.plus_minus)::float AS metric
+        FROM player_game_stats pgs
+        JOIN players p ON p.player_id = pgs.player_id
+        JOIN games g ON g.game_id = pgs.game_id
+        WHERE NOT pgs.is_clutch_data AND g.is_playoff AND g.season = '2025-26'
+          AND pgs.minutes > 0
+        GROUP BY p.name, p.team
+        HAVING COUNT(*) >= 4
+        ORDER BY SUM(pgs.plus_minus) DESC
+        LIMIT 1
+        """,
+        "{metric:+.0f} TOTAL",
+    ),
+]
+
+
+def _compute_leader_cards() -> list[Headline]:
+    """Pull one Headline per stat-leader query. Each query is small,
+    indexed, and runs sub-millisecond on the dev DB."""
+    out: list[Headline] = []
     try:
         with _db() as conn, conn.cursor() as cur:
-            for i, (label, sql, metric_tpl) in enumerate(queries):
+            for i, (label, sql, metric_tpl) in enumerate(_LEADER_QUERIES):
                 try:
                     cur.execute(sql)
                     row = cur.fetchone()
@@ -363,6 +629,7 @@ def _compute_headlines() -> list[Headline]:
                 out.append(
                     Headline(
                         kind="player",
+                        category="leaders",
                         label=label,
                         primary=name,
                         secondary=f"{team} · {gp} GP",
@@ -372,28 +639,36 @@ def _compute_headlines() -> list[Headline]:
                     )
                 )
     except Exception:  # noqa: BLE001
-        logger.exception("compute_headlines failed wholesale")
+        logger.exception("compute_leader_cards failed")
+    return out
 
-    # Hottest team: most playoff wins so far.
+
+def _compute_stats_cards() -> list[Headline]:
+    """Team-level playoff stat cards — top record (the headline-fix card)
+    plus a couple of derived narrative stats."""
+    out: list[Headline] = []
     try:
         with _db() as conn, conn.cursor() as cur:
+            # No outer GROUP BY here: when a team's home and away splits are
+            # identical (e.g. OKC went 4-0 at home and 4-0 on the road),
+            # GROUP BY would collapse the two rows into one and the Python
+            # accumulator below would only see half the wins. The union all
+            # emits up to two rows per team and Python sums them.
             cur.execute(
                 """
-                SELECT team, wins, losses
-                FROM (
-                    SELECT home_team AS team,
-                           SUM((home_score > away_score)::int) AS wins,
-                           SUM((home_score < away_score)::int) AS losses
-                    FROM games WHERE is_playoff AND season = '2025-26'
-                    GROUP BY home_team
-                    UNION ALL
-                    SELECT away_team AS team,
-                           SUM((away_score > home_score)::int) AS wins,
-                           SUM((away_score < home_score)::int) AS losses
-                    FROM games WHERE is_playoff AND season = '2025-26'
-                    GROUP BY away_team
-                ) t
-                GROUP BY team, wins, losses
+                SELECT home_team AS team,
+                       SUM((home_score > away_score)::int) AS wins,
+                       SUM((home_score < away_score)::int) AS losses
+                FROM games WHERE is_playoff AND season = '2025-26'
+                  AND home_score IS NOT NULL
+                GROUP BY home_team
+                UNION ALL
+                SELECT away_team AS team,
+                       SUM((away_score > home_score)::int) AS wins,
+                       SUM((away_score < home_score)::int) AS losses
+                FROM games WHERE is_playoff AND season = '2025-26'
+                  AND home_score IS NOT NULL
+                GROUP BY away_team
                 """
             )
             agg: dict[str, list[int]] = {}
@@ -402,22 +677,123 @@ def _compute_headlines() -> list[Headline]:
                 agg[team][0] += int(wins or 0)
                 agg[team][1] += int(losses or 0)
             if agg:
-                team, (wins, losses) = max(agg.items(), key=lambda x: (x[1][0], -x[1][1]))
+                # Sort by win% desc, then by wins desc (so 8-0 beats 8-2 beats
+                # 8-3, and 5-0 still beats 8-2). This is the key fix: previously
+                # we sorted by raw wins which would have surfaced 8-3 SAS over
+                # 8-0 OKC if they tied on wins.
+                def _key(item):
+                    _, wl = item
+                    w, l = wl
+                    total = w + l
+                    pct = w / total if total else 0.0
+                    return (pct, w, -l)
+                team, (wins, losses) = max(agg.items(), key=_key)
                 meta = TEAM_DIRECTORY.get(team)
+                full_name = (
+                    f"{meta.city} {meta.name}" if meta else team
+                ).strip()
+                metric = f"{wins}-{losses}" + (" · undefeated" if losses == 0 else "")
                 out.append(
                     Headline(
                         kind="team",
+                        category="scores",
                         label="PLAYOFFS · TOP RECORD",
-                        primary=f"{meta.city if meta else team} {meta.name if meta else ''}".strip(),
-                        secondary=f"{wins}–{losses} this run",
-                        metric=team,
+                        primary=full_name,
+                        secondary="best playoff record this run",
+                        metric=metric,
                         tone="amber",
                         team_abbr=team,
                     )
                 )
     except Exception:  # noqa: BLE001
-        logger.exception("hottest_team computation failed")
+        logger.exception("top-record computation failed")
 
+    # Most recent completed playoff game — quick recap card.
+    try:
+        with _db() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT date, home_team, away_team, home_score, away_score
+                FROM games
+                WHERE is_playoff AND season = '2025-26'
+                  AND home_score IS NOT NULL AND away_score IS NOT NULL
+                ORDER BY date DESC, game_id DESC
+                LIMIT 1
+                """
+            )
+            row = cur.fetchone()
+            if row:
+                gdate, home, away, hs, as_ = row
+                winner = home if hs > as_ else away
+                loser = away if hs > as_ else home
+                margin = abs(int(hs) - int(as_))
+                gdate_str = _short_date(gdate)
+                out.append(
+                    Headline(
+                        kind="team", category="scores",
+                        label="LATEST PLAYOFF FINAL",
+                        primary=f"{winner} defeated {loser}",
+                        secondary=f"{max(int(hs), int(as_))}-{min(int(hs), int(as_))} · {gdate_str}",
+                        metric=f"+{margin}",
+                        tone="ember",
+                        team_abbr=winner,
+                    )
+                )
+    except Exception:  # noqa: BLE001
+        logger.exception("latest-final computation failed")
+    return out
+
+
+def _compute_next_games(today: date, limit: int = 4) -> list[Headline]:
+    """Surface the next few upcoming games (whether TBD'd tipoff or not)
+    as ticker cards. Pulls from the same `games` table the live scheduler
+    populates."""
+    out: list[Headline] = []
+    try:
+        with _db() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT date, home_team, away_team, tipoff_utc,
+                       playoff_round, playoff_series, is_playoff
+                FROM games
+                WHERE date >= %s AND home_score IS NULL
+                ORDER BY date ASC,
+                         CASE WHEN tipoff_utc IS NULL THEN 1 ELSE 0 END,
+                         tipoff_utc ASC
+                LIMIT %s
+                """,
+                (today, limit),
+            )
+            for gdate, home, away, tipoff, plyf_round, plyf_series, is_playoff in cur.fetchall():
+                round_label = (
+                    _round_label(plyf_round or _series_round_for_date(gdate))
+                    if is_playoff else "REGULAR SEASON"
+                )
+                # If the tipoff time is known, format an ET-ish time; otherwise
+                # mark the slot as "TBD time" — keeps the card useful even
+                # before the league announces the exact tip.
+                if tipoff:
+                    local = tipoff.astimezone(timezone(timedelta(hours=-4)))
+                    hour12 = ((local.hour - 1) % 12) + 1
+                    ampm = "AM" if local.hour < 12 else "PM"
+                    tip_str = (
+                        f"{local.strftime('%a')} · {hour12}:{local.minute:02d} {ampm} ET"
+                    )
+                else:
+                    tip_str = f"{_short_date(gdate, include_weekday=True)} · time TBD"
+                out.append(
+                    Headline(
+                        kind="team", category="upcoming",
+                        label=round_label,
+                        primary=f"{away} @ {home}",
+                        secondary=plyf_series or "",
+                        metric=tip_str,
+                        tone="ice",
+                        team_abbr=home,
+                    )
+                )
+    except Exception:  # noqa: BLE001
+        logger.exception("compute_next_games failed")
     return out
 
 

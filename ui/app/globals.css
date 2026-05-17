@@ -1,26 +1,159 @@
 @import "tailwindcss";
 
+/* Obsidian + Ember design tokens — premium NBA RAG cockpit */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #07070a;
+  --bg-elev: #0c0c12;
+  --surface: #11111a;
+  --surface-2: #161622;
+  --surface-3: #1d1d2c;
+  --hairline: rgba(255, 255, 255, 0.06);
+  --hairline-strong: rgba(255, 255, 255, 0.12);
+
+  --text: #f4f4f5;
+  --text-muted: #a1a1aa;
+  --text-dim: #71717a;
+
+  --ember-50: #fff3eb;
+  --ember-300: #ffb380;
+  --ember-500: #ff6a1f;
+  --ember-600: #f15a10;
+  --ember-700: #c8480c;
+  --ember-glow: rgba(255, 106, 31, 0.35);
+
+  --ice-300: #bfdbfe;
+  --ice-400: #7dd3fc;
+  --ice-500: #38bdf8;
+
+  --emerald-400: #34d399;
+  --rose-400: #fb7185;
+  --violet-400: #a78bfa;
+  --amber-400: #fbbf24;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-bg: var(--bg);
+  --color-bg-elev: var(--bg-elev);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-hairline: var(--hairline);
+  --color-hairline-strong: var(--hairline-strong);
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-text-dim: var(--text-dim);
+  --color-ember: var(--ember-500);
+  --color-ember-glow: var(--ember-glow);
+  --color-ice: var(--ice-400);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, "JetBrains Mono", Menlo, monospace;
+  --font-display: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html,
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-feature-settings: "cv11", "ss01", "ss03";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background:
+    radial-gradient(1200px 700px at 20% -10%, rgba(255, 106, 31, 0.08), transparent 60%),
+    radial-gradient(900px 600px at 110% 10%, rgba(125, 211, 252, 0.05), transparent 55%),
+    var(--bg);
+  background-attachment: fixed;
+  min-height: 100vh;
 }
+
+::selection { background: var(--ember-500); color: #0b0b10; }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.14);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+}
+
+.glass {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01));
+  backdrop-filter: blur(18px) saturate(120%);
+  -webkit-backdrop-filter: blur(18px) saturate(120%);
+  border: 1px solid var(--hairline);
+}
+.glass-strong {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  border: 1px solid var(--hairline-strong);
+}
+
+.ember-text {
+  background: linear-gradient(180deg, #ffe7d6 0%, #ff8a3d 60%, #ff5a0a 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.ember-glow {
+  box-shadow:
+    0 0 0 1px rgba(255, 106, 31, 0.45),
+    0 8px 30px -8px rgba(255, 106, 31, 0.55),
+    0 0 60px -12px rgba(255, 106, 31, 0.45);
+}
+
+.ring-ember {
+  box-shadow: 0 0 0 1px var(--ember-500), 0 0 24px -2px var(--ember-glow);
+}
+
+.hairline { border-color: var(--hairline); }
+.hairline-strong { border-color: var(--hairline-strong); }
+
+.focus-ember:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 1.5px var(--ember-500),
+    0 0 0 4px rgba(255, 106, 31, 0.18);
+}
+
+.grid-mask {
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, #000 30%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, #000 30%, transparent 75%);
+}
+
+@keyframes orb-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50%      { opacity: 0.85; transform: scale(1.035); }
+}
+.orb-pulse { animation: orb-pulse 4.2s ease-in-out infinite; }
+
+@keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+.shimmer {
+  background: linear-gradient(90deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.10) 50%, rgba(255,255,255,0.04) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s linear infinite;
+}
+
+@keyframes float-y {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-2px); }
+}
+.float-y { animation: float-y 4s ease-in-out infinite; }
+
+textarea, input { caret-color: var(--ember-500); }
