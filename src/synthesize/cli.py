@@ -58,6 +58,62 @@ def ask_cmd(
         console.print(f"\n[bold]{result.answer}[/]")
         return
 
+    # --- Hybrid route ---
+    if result.hybrid is not None:
+        f = result.hybrid.filter
+        console.print(
+            Panel(
+                f"{f.sql}\n\nparams={f.params}\n\n"
+                f"[dim]narrowed to {len(f.player_ids)} player_ids: {f.player_ids[:15]}"
+                f"{'...' if len(f.player_ids) > 15 else ''}[/]\n"
+                f"[dim]{f.explanation}[/]",
+                title=(
+                    f"Hybrid SQL filter (status={result.hybrid.status} "
+                    f"cost=${f.cost_usd:.6f})"
+                ),
+                border_style="magenta",
+            )
+        )
+        if result.hybrid.status != "ok":
+            console.print(f"[yellow]{result.hybrid.notes}[/]")
+            return
+        if result.hybrid.retrieval is not None:
+            chunk_lines = []
+            for i, ch in enumerate(result.hybrid.retrieval.chunks, start=1):
+                snippet = ch.text[:120].replace("\n", " ")
+                chunk_lines.append(
+                    f"[bold]#{i}[/] [dim]score={ch.score:.3f} src={ch.source} "
+                    f"date={ch.date}[/]\n  {snippet}..."
+                )
+            console.print(
+                Panel(
+                    "\n".join(chunk_lines) or "(no chunks)",
+                    title=(
+                        f"Retrieved chunks (bm25={result.hybrid.retrieval.bm25_count} "
+                        f"dense={result.hybrid.retrieval.dense_count} "
+                        f"merged={result.hybrid.retrieval.merged_count} "
+                        f"→ top {len(result.hybrid.retrieval.chunks)})"
+                    ),
+                    border_style="magenta",
+                )
+            )
+        if result.synthesis is not None:
+            footer = (
+                f"\n\n[dim]model={result.synthesis.model} "
+                f"in={result.synthesis.input_tokens} "
+                f"out={result.synthesis.output_tokens} "
+                f"cost=${result.synthesis.cost_usd:.6f} "
+                f"declined={result.synthesis.declined}[/]"
+            )
+            console.print(
+                Panel(
+                    result.synthesis.answer + footer,
+                    title=f"Answer ({len(result.synthesis.cited_chunk_ids)} cited chunks)",
+                    border_style="green",
+                )
+            )
+        return
+
     # --- Stats route ---
     if result.stats is not None:
         if result.stats.generated:

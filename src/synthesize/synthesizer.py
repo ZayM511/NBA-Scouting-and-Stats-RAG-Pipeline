@@ -17,11 +17,14 @@ import anthropic
 
 from src.config import get_settings
 from src.guardrails import Model, guarded_call, record_usage
+from src.retrieve_hybrid.pipeline import HybridRetrievalResult
 from src.retrieve_prose.filters import ScoredChunk
 from src.retrieve_stats.pipeline import StatsResult
 from src.synthesize.prompts import (
+    HYBRID_SYNTHESIS_SYSTEM_PROMPT,
     STATS_SYNTHESIS_SYSTEM_PROMPT,
     SYNTHESIS_SYSTEM_PROMPT,
+    build_hybrid_user_message,
     build_stats_user_message,
     build_user_message,
 )
@@ -196,6 +199,70 @@ class Synthesizer:
             cost_usd=rec.cost_usd,
             chunks_supplied=0,    # stats: rows, not chunks
             declined=_looks_declined(answer_text),
+        )
+
+    def synthesize_hybrid(
+        self,
+        question: str,
+        hybrid: HybridRetrievalResult,
+        narrowed_player_names: list[str],
+        *,
+        session_id: str = "synthesize-hybrid",
+    ) -> SynthesisResult:
+        """Synthesize a cited answer combining the SQL-narrowed player set
+        with prose retrieval results.
+
+        Raises ValueError on empty question or when hybrid.retrieval is None.
+        """
+        if not question or not question.strip():
+            raise ValueError("question must be non-empty")
+        if hybrid.retrieval is None:
+            raise ValueError("hybrid result must have a retrieval object")
+
+        chunks = hybrid.retrieval.chunks
+        user_message = build_hybrid_user_message(
+            question,
+            narrowed_player_names=narrowed_player_names,
+            sql=hybrid.filter.sql,
+            sql_explanation=hybrid.filter.explanation,
+            chunks=chunks,
+        )
+
+        with guarded_call(
+            session_id=session_id,
+            model=self.model,
+            input_text=HYBRID_SYNTHESIS_SYSTEM_PROMPT + "\n\n" + user_message,
+            max_output_tokens=self.max_output_tokens,
+        ):
+            response = self._client.messages.create(
+                model=self.model.value,
+                max_tokens=self.max_output_tokens,
+                system=HYBRID_SYNTHESIS_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": user_message}],
+            )
+
+        answer_text = _extract_text(response)
+        citations, cited_chunk_ids = _parse_citations(answer_text, chunks)
+        declined = _looks_declined(answer_text)
+
+        in_tokens = response.usage.input_tokens
+        out_tokens = response.usage.output_tokens
+        rec = record_usage(
+            session_id=session_id,
+            model=self.model,
+            input_tokens=in_tokens,
+            output_tokens=out_tokens,
+        )
+        return SynthesisResult(
+            answer=answer_text,
+            citations=citations,
+            cited_chunk_ids=cited_chunk_ids,
+            model=self.model.value,
+            input_tokens=in_tokens,
+            output_tokens=out_tokens,
+            cost_usd=rec.cost_usd,
+            chunks_supplied=len(chunks),
+            declined=declined,
         )
 
 

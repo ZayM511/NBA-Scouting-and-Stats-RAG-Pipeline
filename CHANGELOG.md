@@ -4,6 +4,51 @@ All notable changes to this project land here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+### Phase G — Hybrid retrieval (SQL filter then prose) — ALL THREE ROUTES LIVE (2026-05-17)
+
+The third and final retrieval route ships. The router → retrieve → synthesize loop is now end-to-end for every question the project handles: numeric (`stats`), qualitative (`prose`), and compound (`hybrid`).
+
+Hybrid pipeline:
+
+1. **SQL filter** — Claude Sonnet 4.6 generates a `SELECT DISTINCT player_id` query that narrows to players matching the numeric criterion. Goes through the same `review_sql()` safety layer and runs against the read-only `nbarag_readonly` role.
+2. **Prose retrieval inside the filter** — `hybrid_search` (BM25 + dense + Cohere Rerank 3.5) runs with `ChunkFilters(player_ids=narrowed_set)`. The GIN index on `articles_chunks.player_ids` makes this the cheap-filter-then-vector path the project was designed around.
+3. **Synthesis** — Opus 4.7 writes a cited answer that names the SQL-narrowed players AND cites the prose chunks for the qualitative claims.
+
+**Added**
+
+- `src/retrieve_hybrid/sql_filter.py` — `generate_hybrid_filter()`. Specialized variant of the stats SQL generator with a prompt that always returns one column (`player_id`). Reuses `GENERATE_SQL_TOOL` and `review_sql()`. Returns `FilterResult` with status `ok` / `safety_rejected` / `gen_failed` / `exec_failed` / `empty`.
+- `src/retrieve_hybrid/pipeline.py` — `retrieve_hybrid()` orchestrator. SQL filter → prose search with player_ids filter. Returns `HybridRetrievalResult` carrying both pieces for the UI trace.
+- `src/synthesize/prompts.py` — `HYBRID_SYNTHESIS_SYSTEM_PROMPT` ("start with the SQL-narrowed set, then cite the prose") and `build_hybrid_user_message()`.
+- `src/synthesize/synthesizer.py` — `synthesize_hybrid()` method. Takes a `HybridRetrievalResult` and the narrowed player names, returns a cited `SynthesisResult`.
+- `src/synthesize/pipeline.py` — `ask()` now branches to `_ask_hybrid()` when the router picks `hybrid`. `AskResult` gains a `hybrid` field. Hybrid path looks up canonical player names from the `players` table for the synthesis prompt.
+- `src/synthesize/cli.py` — renders a Hybrid panel (SQL filter + narrowed player_ids + retrieved chunks + cited answer).
+
+**Live end-to-end hybrid demo on the 257-chunk corpus**
+
+Question: `"Of players averaging 25+ points per game in the regular season, who is getting the most attention in playoff coverage?"`
+
+- Router: `hybrid`
+- SQL filter narrowed to **17 players** averaging 25+ PPG (the SQL used `%(min_ppg)s` parameterization, was approved by safety, executed under the read-only role)
+- Hybrid search inside that player set: BM25 0, dense 50, merged 50, reranker top-6
+- Synthesis cited 5 of the 6 chunks. Key insight from the answer: *"the loudest playoff storyline in the corpus — LeBron's 3-0 lead over Houston without Luka — centers on a player who isn't in the 25+ PPG set"*. Brunson's 25/44 three-point night cited at `[^2]`, Embiid 34/12 + Maxey 30 in a Sixers loss at `[^5]`, Jokić 28/9/10 in a Nuggets loss at `[^6]`.
+- Total cost: $0.010 (router) + $0.012 (SQL filter) + $0.092 (synthesis) ≈ **$0.11 per hybrid answer**
+
+**One known gap surfaced by the first demo**
+
+The first hybrid attempt asked about "guards averaging 20+ ppg" and the SQL filter returned 0 player_ids — the pipeline gracefully reported `no_players` and stopped. Root cause: `players.position` is `NULL` for every row because `nba_api`'s `CommonAllPlayers` endpoint doesn't include position. Filed as a Phase C follow-up (the top-30 enrichment pass that ingests advanced splits will also pull positions).
+
+**All three routes are now LIVE**
+
+| Route | Try it |
+|---|---|
+| `prose` | `python -m src.synthesize.cli "What do threads say about Wemby's defense?"` |
+| `stats` | `python -m src.synthesize.cli "Who leads the NBA in threes?"` |
+| `hybrid` | `python -m src.synthesize.cli "Of 25+ PPG players, who is most-praised in playoff coverage?"` |
+
+**210 tests passing.**
+
+---
+
 ### Phase E — Stats retrieval (text-to-SQL) wired into ask() (2026-05-17)
 
 The router can now dispatch numeric questions to a real SQL path: Claude Sonnet 4.6 generates parameterized SQL via tool use, a programmatic safety layer rejects anything outside `SELECT` / `WITH`, execution runs against the read-only `nbarag_readonly` Postgres role, and Opus 4.7 synthesizes the rows into a natural-language answer.

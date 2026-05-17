@@ -12,6 +12,7 @@ import logging
 from dataclasses import dataclass
 
 from src.ingest_prose.embedder import Embedder
+from src.retrieve_hybrid.pipeline import HybridRetrievalResult, retrieve_hybrid
 from src.retrieve_prose.filters import ChunkFilters
 from src.retrieve_prose.hybrid_search import HybridSearchResult, hybrid_search
 from src.retrieve_prose.rerank import Reranker
@@ -37,6 +38,7 @@ class AskResult:
     route: RouteDecision
     retrieval: HybridSearchResult | None = None
     stats: StatsResult | None = None
+    hybrid: HybridRetrievalResult | None = None
     synthesis: SynthesisResult | None = None
     not_yet_implemented: bool = False
     notes: str = ""
@@ -98,12 +100,15 @@ def ask(
             session_id=session_id,
         )
 
-    # hybrid — phase G
-    return AskResult(
-        question=question,
-        route=decision,
-        not_yet_implemented=True,
-        notes=f"route='{decision.route}' deferred to phase G (hybrid).",
+    # hybrid: SQL filter narrows the player set, then prose retrieval inside it.
+    return _ask_hybrid(
+        question,
+        decision,
+        top_k=top_k,
+        embedder=embedder,
+        reranker=reranker,
+        synthesizer=synthesizer,
+        session_id=session_id,
     )
 
 
@@ -206,3 +211,75 @@ def _ask_stats(
         stats=stats,
         synthesis=syn,
     )
+
+
+# --------------------------------------------------------------------------- #
+# Hybrid route
+# --------------------------------------------------------------------------- #
+
+
+def _ask_hybrid(
+    question: str,
+    decision: RouteDecision,
+    *,
+    top_k: int,
+    embedder: Embedder | None,
+    reranker: Reranker | None,
+    synthesizer: Synthesizer | None,
+    session_id: str,
+) -> AskResult:
+    own_embedder = embedder is None
+    own_reranker = reranker is None
+    embedder = embedder or Embedder()
+    reranker = reranker or Reranker()
+    try:
+        hybrid = retrieve_hybrid(
+            question,
+            top_k=top_k,
+            embedder=embedder,
+            reranker=reranker,
+            session_id=session_id,
+        )
+    finally:
+        if own_embedder:
+            embedder.close()
+        if own_reranker:
+            reranker.close()
+
+    if hybrid.status != "ok":
+        return AskResult(
+            question=question,
+            route=decision,
+            hybrid=hybrid,
+            notes=hybrid.notes,
+        )
+
+    # Resolve canonical names for the narrowed player_ids (small lookup).
+    narrowed_names = _lookup_player_names(hybrid.filter.player_ids)
+
+    synthesizer = synthesizer or Synthesizer()
+    syn = synthesizer.synthesize_hybrid(
+        question,
+        hybrid,
+        narrowed_player_names=narrowed_names,
+        session_id=session_id,
+    )
+    return AskResult(
+        question=question,
+        route=decision,
+        hybrid=hybrid,
+        synthesis=syn,
+    )
+
+
+def _lookup_player_names(player_ids: list[int]) -> list[str]:
+    """Pull canonical names for a list of player_ids from `players`."""
+    if not player_ids:
+        return []
+    from src.ingest_prose.db import connect, lookup_player_names
+
+    with connect() as conn:
+        name_map = lookup_player_names(conn, player_ids)
+    # Preserve the input order (often comes back from the SQL filter
+    # in a meaningful order — top scorers first, etc.).
+    return [name_map[pid] for pid in player_ids if pid in name_map]
