@@ -4,6 +4,44 @@ All notable changes to this project land here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+### Phase F — Prose retrieval (BM25 + dense + Cohere Rerank 3.5) (2026-05-17)
+
+Two-stage hybrid retrieval over `articles_chunks`. BM25 (via Postgres `ts_rank_cd`) plus dense (pgvector cosine over voyage-3-large vectors) give cheap recall up to 50 candidates each. Cohere Rerank 3.5 re-scores the merged set with a cross-encoder and returns the final top-k. This is the prose path the router dispatches to when it picks `route="prose"`.
+
+**Added**
+
+- `src/retrieve_prose/filters.py` — `ChunkFilters` dataclass shared by all three retrievers. Composes into parameterized SQL WHERE clauses (no string concatenation; the player_ids filter uses `&&` to hit the GIN index). `ScoredChunk` dataclass for results.
+- `src/retrieve_prose/bm25.py` — `search_bm25()`. `ts_rank_cd` over the GENERATED `text_tsv` column (cover-density rank, favors chunks where query terms cluster).
+- `src/retrieve_prose/dense.py` — `search_dense()`. Embeds the query with `input_type="query"` (Voyage's asymmetric model needs this) and orders by `embedding <=> $vec`.
+- `src/retrieve_prose/rerank.py` — `Reranker` class. Calls Cohere `/v2/rerank` directly via `requests` (skips the cohere SDK to avoid another SDK-vs-3.14 incompat). Retries on 429 / 5xx. `rerank_chunks()` convenience returns ranked `ScoredChunk`s with relevance scores.
+- `src/retrieve_prose/hybrid_search.py` — `hybrid_search()` orchestrator. BM25 union Dense, dedupe on chunk_id, Cohere rerank, top-k. Returns `HybridSearchResult` with the trace info (bm25/dense/merged counts) the UI sidebar will surface.
+- `src/retrieve_prose/cli.py` — Typer CLI: `search` (one strategy at a time, with player/source filters) and `compare` (side-by-side BM25 / Dense / Hybrid).
+- `tests/retrieve_prose/test_filters.py` (8 tests) — filter SQL generation paths including the GIN-friendly `&&` operator.
+- `tests/retrieve_prose/test_hybrid_merge.py` (5 tests) — union-by-chunk_id, dedupe, order preservation.
+
+**Live retrieval comparison on the 257-chunk corpus**
+
+Query: `"cooper flagg rookie"`
+
+| Strategy | Top-1 chunk | Top-1 score |
+|---|---|---|
+| BM25 only | Comments on Flagg / Kon / VJ ROY race | 0.0014 |
+| Dense only | Same chunk (Flagg/Kon/VJ comments) | 0.5557 |
+| **Hybrid + Rerank** | **The ROY announcement chunk** (`"Dallas Mavericks' Cooper Flagg has won the 2025-26 Rookie of the Year award"`) | **0.8921** |
+
+The rerank step moved the actual ROY announcement chunk to position #1, ahead of the discussion chunks that the dense path scored higher.
+
+Query: `"wemby defensive impact"` returned 0 from BM25 because `plainto_tsquery` ANDs all terms and "wemby & defensive & impact" together is rare in the corpus. Hybrid+Rerank top-1 (via dense + rerank) was the Wemby 39-pt / 5-block Game 2 chunk at 0.6405. Dense alone had it at #1 already, but the rerank score is the calibrated relevance estimate the synthesis layer can threshold on.
+
+**Known follow-ups**
+
+- BM25 with `plainto_tsquery` is AND-only and misses queries with three or more loose terms. Switching to `websearch_to_tsquery` plus an OR-fallback for queries that return zero hits would lift BM25 recall meaningfully. For the current corpus the dense+rerank fallback already covers it.
+- Rerank cost is about $0.002 per call (Cohere Rerank 3.5 pricing as of 2026). The router-then-rerank pattern means we only run the reranker on the prose route, not stats, so this stays manageable.
+
+**13 new tests; 149 total passing.**
+
+---
+
 ### Phase D — Query router (2026-05-17)
 
 The router classifies a natural-language NBA question into one of three retrieval routes: `stats` (text-to-SQL on Postgres), `prose` (vector search on `articles_chunks`), or `hybrid` (SQL filter then vector search inside the filtered set).
