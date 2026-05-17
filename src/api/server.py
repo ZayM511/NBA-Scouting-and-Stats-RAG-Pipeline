@@ -110,6 +110,12 @@ class HybridFilterOut(BaseModel):
     player_ids: list[int]
     cost_usd: float
     status: str
+    # Phase L.4: the numeric half of a hybrid answer. Surfacing the rows in
+    # the UI sidebar so reviewers can see both the stats AND the prose
+    # evidence the synthesis layer used.
+    rows: list[dict[str, Any]] = []
+    column_names: list[str] = []
+    row_count: int = 0
 
 
 class HybridOut(BaseModel):
@@ -375,6 +381,9 @@ def _hybrid_out(result: AskResult) -> HybridOut | None:
             player_ids=h.filter.player_ids,
             cost_usd=h.filter.cost_usd,
             status=h.filter.status,
+            rows=h.filter.rows,
+            column_names=h.filter.column_names,
+            row_count=len(h.filter.rows),
         ),
         retrieval=_retrieval_out_from(h.retrieval) if h.retrieval else None,
         notes=h.notes,

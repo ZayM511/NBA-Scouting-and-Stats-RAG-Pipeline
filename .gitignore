@@ -19,8 +19,10 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+# Anchor lib/ and lib64/ to the repo root so ui/lib/ (Next.js helpers)
+# isn't also caught.
+/lib/
+/lib64/
 parts/
 sdist/
 var/

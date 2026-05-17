@@ -1,11 +1,12 @@
-"""Hybrid-route SQL filter: generate a SELECT that returns ONLY player_ids
-matching the numeric criteria from the question.
+"""Hybrid-route SQL: generate a SELECT that answers the numeric half of a
+compound question AND identifies the players whose prose chunks should be
+retrieved for the qualitative half.
 
 This is a specialized variant of `src/retrieve_stats/sql_generator.py`. The
-general stats generator can return any shape of result. For the hybrid
-route we need exactly one column — `player_id` — so the downstream prose
-retrieval can use the resulting set as a ChunkFilters(player_ids=...)
-filter.
+hybrid SQL is required to include a `player_id` column (so we can narrow
+the prose retrieval to those players), and is free to include any other
+columns that help answer the numeric half. The full result rows are
+handed to the synthesis step alongside the prose chunks.
 
 Same defense-in-depth: tool-use enforces the typed `sql` + `params` +
 `explanation` shape; the same `review_sql()` safety layer runs before
@@ -32,33 +33,42 @@ logger = logging.getLogger(__name__)
 
 
 HYBRID_SQL_GEN_SYSTEM_PROMPT = f"""\
-You are the SQL-filter step of a HYBRID retrieval pipeline. The user asked
-a compound question that mixes a numeric filter ("guards averaging 20+
-points", "players over 35 with TS% above .600") with a qualitative
-criterion ("praised for off-ball movement", "written up as future Hall of
-Famers"). The qualitative part is handled by the prose retrieval layer in
-a follow-up step; YOUR job is only to produce the numeric narrowing.
+You are the SQL step of a HYBRID retrieval pipeline. The user asked a
+compound question that mixes a numeric data need ("clutch TS splits for
+SGA", "guards averaging 20+ points") with a qualitative criterion
+("praised for off-ball movement", "is he a playoff riser"). The
+qualitative part is answered by the prose retrieval step in parallel;
+your job is the numeric half and the player set the prose step should
+focus on.
 
 Hard rules (the safety layer will reject any violation):
 
-1. Return a SINGLE column named `player_id`. No other columns, no aliases.
-   Use SELECT DISTINCT player_id, never SELECT *. The downstream layer
-   only needs the ID set.
+1. INCLUDE `player_id` as one of the SELECT columns. The downstream
+   prose step uses these IDs to filter chunks. The column must be named
+   exactly `player_id`.
 
-2. SELECT only. No INSERT, UPDATE, DELETE, DDL, COPY.
+2. INCLUDE whatever other columns answer the user's numeric question.
+   - Single-player lookups (clutch splits, season averages): include
+     the split column (season_type, etc.) and the relevant metrics
+     (gp, pts, fga, fta, ts_pct, etc.).
+   - Multi-player rankings ("top scorers shooting >40% from 3"):
+     include name, the filter metrics, and ORDER BY + LIMIT to a
+     sensible cap (default 10 if unspecified).
 
-3. ONE statement, parameterized via %(name)s placeholders for any
+3. SELECT only. No INSERT, UPDATE, DELETE, DDL, COPY.
+
+4. ONE statement, parameterized via %(name)s placeholders for any
    user-controlled values (thresholds, season names, position codes).
-
-4. ORDER BY and LIMIT are encouraged but not required for set-style
-   results. If you ORDER BY, prefer a stable ordering (player_id).
 
 5. NEVER attempt to answer the qualitative part in SQL. Don't search
    articles_chunks here. The prose layer handles that.
 
-6. Use the schema as documented below. Restrict to NOT
-   pgs.is_clutch_data unless the question explicitly asks for clutch
-   stats.
+6. Use the schema as documented below.
+   - For clutch questions use `player_clutch_stats` (season aggregate).
+   - For full-season averages use `player_game_stats` with NOT
+     pgs.is_clutch_data and AVG / SUM aggregations.
+   - For comparison questions, include both the filter metric AND any
+     supporting metric the user might want context on.
 
 Schema:
 
@@ -70,7 +80,12 @@ Always emit the answer via the generate_sql tool. Never return prose.
 
 @dataclass(frozen=True)
 class FilterResult:
-    """Result of the hybrid SQL-filter step."""
+    """Result of the hybrid SQL step.
+
+    `player_ids` is the deduplicated player set used to filter prose
+    retrieval. `rows` is the full result table the synthesis step uses
+    to answer the numeric half of the question.
+    """
 
     player_ids: list[int]
     sql: str
@@ -80,6 +95,8 @@ class FilterResult:
     status: str  # 'ok' | 'safety_rejected' | 'gen_failed' | 'exec_failed' | 'empty'
     cost_usd: float = 0.0
     error: str | None = None
+    rows: list[dict[str, Any]] = field(default_factory=list)
+    column_names: list[str] = field(default_factory=list)
 
 
 class HybridFilterError(Exception):
@@ -170,13 +187,14 @@ def generate_hybrid_filter(
         )
 
     # Pull player_ids out of the rows. Be forgiving about the column name
-    # being slightly off — accept 'player_id', 'PLAYER_ID', or the first
+    # being slightly off: accept 'player_id', 'PLAYER_ID', or the first
     # column if there's only one.
     player_ids = _extract_player_ids(execution.rows, execution.column_names)
     if not player_ids:
         return FilterResult(
             player_ids=[], sql=sql, params=dict(params), explanation=explanation,
             safety=safety, status="empty", cost_usd=rec.cost_usd,
+            rows=list(execution.rows), column_names=list(execution.column_names),
         )
 
     return FilterResult(
@@ -187,6 +205,8 @@ def generate_hybrid_filter(
         safety=safety,
         status="ok",
         cost_usd=rec.cost_usd,
+        rows=list(execution.rows),
+        column_names=list(execution.column_names),
     )
 
 

@@ -225,6 +225,8 @@ class Synthesizer:
             narrowed_player_names=narrowed_player_names,
             sql=hybrid.filter.sql,
             sql_explanation=hybrid.filter.explanation,
+            rows=hybrid.filter.rows,
+            column_names=hybrid.filter.column_names,
             chunks=chunks,
         )
 
