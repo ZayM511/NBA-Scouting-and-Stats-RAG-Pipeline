@@ -4,6 +4,41 @@ All notable changes to this project land here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+### Phase H — Synthesis layer and end-to-end ask pipeline (2026-05-17)
+
+The system now answers prose questions end-to-end: question → router (Sonnet 4.6) → hybrid retrieval (BM25 + dense + Cohere Rerank 3.5) → synthesis (Opus 4.7) → cited answer with inline `[^N]` footnotes pointing back to the source chunks. Stats and hybrid routes route correctly today but defer gracefully until Phase E and Phase G ship.
+
+**Added**
+
+- `src/synthesize/prompts.py` — `SYNTHESIS_SYSTEM_PROMPT` with two non-negotiables: every factual claim carries an inline `[^N]` citation, and the model uses an explicit "the retrieved sources don't have enough information" phrase rather than inventing facts when chunks are insufficient. Also defines `build_user_message()` which numbers chunks `[1]…[N]` with their source + date headers.
+- `src/synthesize/synthesizer.py` — `Synthesizer` class. Wraps Claude Opus 4.7 with `guarded_call` (token caps + cost ceiling + circuit breaker), parses inline `[^N]` citations out of the prose, drops out-of-range citations, deduplicates the resulting chunk_ids while preserving first-citation order, and detects the "declined" escape phrase. Returns `SynthesisResult` with answer, citations, cited_chunk_ids, model, tokens, cost, and declined flag.
+- `src/synthesize/pipeline.py` — `ask()` orchestrator: router → retrieval (if prose) → synthesis. Returns `AskResult` with the full trace (route decision, retrieval counts, synthesis cost). Stats and hybrid routes return `not_yet_implemented=True` with a polite note that names the future phase that will wire them in.
+- `src/synthesize/cli.py` — Typer CLI: `python -m src.synthesize.cli "<question>"`. Renders three panels: Router (route + reasoning), Retrieved chunks (with score + source + snippet), Answer (with inline citations + cost footer).
+- `tests/synthesize/test_synthesizer.py` (13 tests) — covers `build_user_message` (numbering, metadata header, empty-chunk handling), `_parse_citations` (simple, combined `[^1][^3]`, dedupe, out-of-range, no-citations), and the `Synthesizer` itself (returns cited answer, marks declined, rejects empty input, sends correct system prompt + user message shape).
+
+**Live end-to-end demo on the 257-chunk corpus**
+
+Question: `"What do Reddit threads say about Wemby's defensive plays in the playoffs?"`
+
+- Router classified as `prose` ("Fan/Reddit opinion and narrative about Wemby's defensive plays lives in articles_chunks, not in SQL stats")
+- Hybrid retrieval merged 50 dense candidates → reranker top-6
+- Opus 4.7 produced a 4-citation answer covering: the 5-block Game 2 (`[^2]`), the 12-block triple-double (`[^5]`), the block on Edwards with Gobert grabbing his arm (`[^4]`), and the Wemby-Castle "pincer" defensive chemistry (`[^3]`)
+- Cost: $0.010 (router) + ~$0.001 (hybrid + rerank) + $0.081 (Opus synthesis) ≈ **$0.09 per answer**
+
+Stats-route fallback: `"Who leads the NBA in three-pointers made this season?"` correctly routes to `stats` and returns `"This question routes to 'stats', which isn't wired into the synthesis layer yet"` instead of hallucinating a number. Same graceful fallback for hybrid.
+
+**Cost notes**
+
+Opus 4.7 at $75 per million output tokens is the most expensive piece. Three reasonable cost-reduction levers for later:
+
+- Prompt-cache the SYNTHESIS_SYSTEM_PROMPT (stable across all calls) — cuts the 3-4K input tokens to roughly $0.001 on cache hits, saving most of the input-side cost.
+- Cascade to Sonnet 4.6 for typical questions and only escalate to Opus when the synthesis prompt explicitly needs nuance — would cut synthesis cost roughly 5x.
+- Cap the retrieved-chunk count at the synthesizer (currently top-8); smaller context windows save tokens.
+
+**13 new tests; 162 total passing.**
+
+---
+
 ### Phase F — Prose retrieval (BM25 + dense + Cohere Rerank 3.5) (2026-05-17)
 
 Two-stage hybrid retrieval over `articles_chunks`. BM25 (via Postgres `ts_rank_cd`) plus dense (pgvector cosine over voyage-3-large vectors) give cheap recall up to 50 candidates each. Cohere Rerank 3.5 re-scores the merged set with a cross-encoder and returns the final top-k. This is the prose path the router dispatches to when it picks `route="prose"`.
