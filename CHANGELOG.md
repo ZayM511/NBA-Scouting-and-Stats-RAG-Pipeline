@@ -4,6 +4,50 @@ All notable changes to this project land here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+### Phase A.2 — Player alias map populated (2026-05-16)
+
+**Added**
+
+- `src/normalize_entities/generate_aliases.py` — Typer CLI with three commands:
+  - `sync` LLM-generates aliases for every active player (top-30 first so the famous owner of an ambiguous alias claims it). `--limit N` for partial runs, `--force` to re-process, `--max-cost-usd` as a hard ceiling, `--dry-run` to project cost without spending.
+  - `status` prints alias counts per source plus a sample of top-30 aliases.
+  - `lookup --query "..."` resolves a single alias string to its player.
+- `tests/normalize_entities/test_generate_aliases.py` — 17 unit tests covering normalization (diacritics → ASCII, apostrophes/hyphens preserved, whitespace collapse), JSON parsing edge cases (code fences, prose wrappers, mixed-type arrays), and the canonical-row builder.
+
+**Populated**
+
+| Metric | Value |
+|---|---|
+| Active players processed | 530 |
+| LLM coverage (top 30) | **30 / 30 (100%)** |
+| LLM coverage (other active) | 453 / 500 (90.6%) |
+| Total alias rows | 1,530 (530 canonical + 1,000 LLM) |
+| Total cost (full run) | **$0.88** USD via Claude Sonnet 4.6 |
+| Wall time | ~13 minutes (sequential, sleep_ms=0) |
+
+The 47 players without LLM aliases (role players, two-way contracts) returned `[]` from the LLM — correct behavior, the model declined to invent nicknames it wasn't sure about. They still have their canonical full-name row, so they're searchable.
+
+**Quality spot-check** (every entry resolves correctly):
+
+- `the joker` → Nikola Jokić
+- `the chef` / `wardell` / `chef curry` → Stephen Curry
+- `the beard` → James Harden
+- `wemby` → Victor Wembanyama
+- `kat` → Karl-Anthony Towns
+- `lbj` / `king james` / `bron bron` → LeBron James
+- `kd` / `slim reaper` / `easy money sniper` → Kevin Durant
+- `sga` → Shai Gilgeous-Alexander
+- `the brow` → Anthony Davis
+- `dame` → Damian Lillard
+
+**Design notes**
+
+- `ON CONFLICT (alias) DO NOTHING` plus top-30-first ordering handles disambiguation. The famous owner of "Curry" (Stephen) claims the row before Seth Curry can.
+- One known disambiguation artifact: `the alien` resolved to Alperen Sengun (player_id 1630578) before Victor Wembanyama (1641705) because Sengun's id sorts first. Both get called "the alien" in fan discourse; hand-editable if we prefer Wemby as the canonical owner.
+- Cost tracking went through `src.guardrails.record_usage`, so the hourly circuit breaker would have tripped if anything went wild. The per-session ceiling is intentionally bypassed for ingest paths.
+
+---
+
 ### Phase A.1 — Top-30 player selection (2026-05-16)
 
 **Added**
