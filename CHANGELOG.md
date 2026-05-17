@@ -4,6 +4,47 @@ All notable changes to this project land here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+### Phase E — Stats retrieval (text-to-SQL) wired into ask() (2026-05-17)
+
+The router can now dispatch numeric questions to a real SQL path: Claude Sonnet 4.6 generates parameterized SQL via tool use, a programmatic safety layer rejects anything outside `SELECT` / `WITH`, execution runs against the read-only `nbarag_readonly` Postgres role, and Opus 4.7 synthesizes the rows into a natural-language answer.
+
+**Added**
+
+- `src/retrieve_stats/schema.py` — `SCHEMA_DESCRIPTION` constant kept in sync with `001_init.sql` via 24 enforcement tests. Lists every table, the relevant columns, the GIN `&&` convention for `player_ids`, and two worked-example queries that prime the model.
+- `src/retrieve_stats/prompts.py` — `SQL_GEN_SYSTEM_PROMPT` (read-only contract, parameterization mandate) and `GENERATE_SQL_TOOL` (tool schema with `sql`, `params`, `explanation` fields). Tool use guarantees structured output.
+- `src/retrieve_stats/sql_safety.py` — `review_sql()` runs four checks. Forbidden keywords (DDL/DML/COPY/GRANT/file-reads) as tokens (strips string literals + comments first so `'I love a DROP step'` doesn't false-match), single-statement, must start with `SELECT` or `WITH`, declared params must have `%(name)s` placeholders.
+- `src/retrieve_stats/sql_generator.py` — Sonnet 4.6 with tool use, wrapped in `guarded_call` for token + cost controls.
+- `src/retrieve_stats/executor.py` — connects via `POSTGRES_READONLY_URL` (the `nbarag_readonly` role from `docker/initdb/02_readonly_role.sql`). 10-second `statement_timeout`, caps results at 1000 rows.
+- `src/retrieve_stats/pipeline.py` — `retrieve_stats()` orchestrator. Returns `StatsResult` with status `ok` / `safety_rejected` / `gen_failed` / `exec_failed`.
+- `src/retrieve_stats/cli.py` — standalone CLI for the stats path.
+- `src/synthesize/synthesizer.py` — added `synthesize_stats()` method that takes a `StatsResult` and produces a one-or-two-sentence answer. The SQL itself is the citation; the UI sidebar shows it.
+- `src/synthesize/prompts.py` — added `STATS_SYNTHESIS_SYSTEM_PROMPT` with strict "quote numbers exactly" and "no inventing context" rules.
+- `src/synthesize/pipeline.py` — `ask()` now branches on route. Prose dispatches to hybrid-retrieval + chunk-synthesis. Stats dispatches to the SQL pipeline + stats-synthesis. Hybrid defers gracefully to Phase G.
+- `src/synthesize/cli.py` — renders a Stats panel (SQL + params + status + cost) when the route is stats.
+
+**Live demo on the stats route**
+
+Question: `"Who leads the NBA in three-pointers made this season?"`
+
+- Router: `stats`
+- Generated SQL with `%(season)s` parameterization
+- Safety: approved
+- Execution: 56ms, 10 rows
+- Synthesis: **"Kon Knueppel (CHA) leads the NBA with 273 three-pointers made in the 2025-26 regular season, narrowly ahead of teammate LaMelo Ball (272) and Luka Dončić (254)."**
+- Total cost: about **$0.03** per stats answer (Sonnet SQL gen + Opus synthesis)
+
+**Defense in depth on LLM05 (improper output handling)**
+
+Three layers stop a bad SQL output from reaching the database:
+
+1. The `nbarag_readonly` Postgres role is granted `SELECT` only. Even a successful injection fails at the engine level with `InsufficientPrivilege`.
+2. The programmatic `review_sql()` layer rejects DDL/DML, multi-statements, and unparameterized user input before anything reaches the DB.
+3. The tool-use schema gives the model a typed `sql` field and a separate `params` dict, so the right shape is the path of least resistance.
+
+**48 new tests; 210 total passing.**
+
+---
+
 ### Phase H — Synthesis layer and end-to-end ask pipeline (2026-05-17)
 
 The system now answers prose questions end-to-end: question → router (Sonnet 4.6) → hybrid retrieval (BM25 + dense + Cohere Rerank 3.5) → synthesis (Opus 4.7) → cited answer with inline `[^N]` footnotes pointing back to the source chunks. Stats and hybrid routes route correctly today but defer gracefully until Phase E and Phase G ship.
