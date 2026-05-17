@@ -2,7 +2,15 @@
 
 A hybrid retrieval-augmented system for the 2025-26 NBA season. A query router decides whether a question wants numeric stats from Postgres, qualitative scouting from articles, or both, then a synthesis model answers with citations from both sources.
 
-> **Status:** scaffold + ingestion landed. Entity normalization, prose ingestion, router, retrieval, and synthesis come next. The README updates after each phase.
+> **Status (2026-05-17):** stats ingestion, entity normalization, and prose ingestion are live. The query router, synthesis layer, eval set, and UI come next. See [CHANGELOG.md](./CHANGELOG.md) for per-phase commit notes.
+
+## What's working today
+
+- **Stats DB:** 30 teams, 587 players (530 active flagged), 1,298 games (1,230 regular + 68 playoff), 28,185 box-score rows for the 2025-26 season.
+- **Top-30 player flag:** the 30 hand-curated players who get deep-dive enrichment. Ranking and rationale in [docs/top30-rankings.md](./docs/top30-rankings.md).
+- **Player alias map:** 1,525 aliases mapping nicknames to player_ids. `"the chef"` → Stephen Curry, `"wemby"` → Wembanyama, `"sga"` → Gilgeous-Alexander. Full coverage of the top 30; 90%+ of the rest of the active roster.
+- **Prose corpus:** 197 Reddit threads across r/nba, r/Thunder, r/NBASpurs, r/NYKnicks, and r/clevelandcavs (top-of-month). 257 chunks indexed in pgvector. Cost so far: about $0.009 in Voyage embeddings.
+- **Vector search works:** queries like `"Cooper Flagg's rookie season"` return the ROY-announcement chunk at 0.51 cosine similarity; `"LeBron at age 41"` returns the 41-year-old box-score thread at 0.65.
 
 ## Demo
 
@@ -94,21 +102,25 @@ Screenshots land in `docs/screenshots/` once the UI ships.
 
 ## Evaluation
 
-Braintrust integration lands with the eval set in a later phase.
+The full Braintrust eval set with stratified stats / prose / hybrid coverage lands with the router and synthesis layers. Until then, this section captures spot-check retrieval quality on the live 257-chunk corpus.
 
-The eval set targets 30 questions, stratified 10/10/10 across stats / prose / hybrid routes. Each case carries:
+**Spot-check retrievals** (against 197 r/nba and team-sub threads from May 2026):
 
-- The expected route
-- The expected SQL or chunk IDs (where deterministic)
-- A model-graded rubric on the final answer
+| Query | Top match (cosine sim) | Why it's the right hit |
+|---|---|---|
+| `"Cooper Flagg's rookie season"` | 0.51 — ROY announcement thread | Direct news mention |
+| `"LeBron at age 41"` | 0.65 — "41 years old LeBron James checks out: 27 PTS" | Box-score post |
+| `"Harden trade to Cleveland"` | 0.65 — Cavs Big 3 thread | Trade context |
+| `"Wemby's defensive impact at the rim"` | 0.55 — Spurs Wemby/Castle/Clingan sequence | Defensive set |
+| `"playoff fatigue in the Western Conference"` | 0.54 — Wolves vs Nuggets elimination | "DENVER NUGGETS HAVE BEEN ELIMINATED" |
 
-Metrics tracked: router accuracy, SQL correctness, retrieval recall@5 and MRR, end-to-end answer quality. Numbers land here as they're measured.
+**The eval set, once it lands, will track**:
 
 | Experiment | recall@5 | MRR | Notes |
 |---|---|---|---|
 | Baseline (no rerank) | _pending_ | _pending_ | |
 | + Cohere Rerank 3.5 | _pending_ | _pending_ | |
-| + Contextual-retrieval prefix | _pending_ | _pending_ | |
+| + Contextual-retrieval prefix | _pending_ | _pending_ | already applied to every chunk; A/B comparison is the experiment |
 
 ## Security
 
@@ -133,6 +145,12 @@ Full policy: see [SECURITY.md](./SECURITY.md). For the always-on rules Claude Co
 **A single retrieval pipeline that handles every question.** The first design sketch tried to run BM25 + dense + rerank for every query and let the synthesis model figure out whether to also do a SQL lookup. It was vague and slow. The three-route router is more code but the eval signal is cleaner: each route can be measured and improved separately.
 
 **Fixed-character chunking.** The path of least resistance for generic prose. Rejected because it splits mid-sentence and mid-word, destroying meaning at chunk boundaries. Recursive chunking that respects paragraph and sentence breaks is the 2026 default and noticeably outperforms fixed-character on every dataset I've seen.
+
+**Trusting the LLM-generated alias map without an audit pass.** The first ingest produced a top-15 mentions list where Kevin Love was #1 with 60 chunk-mentions, despite barely appearing by name. Cause: the alias generator added `love` as a 1-token nickname for Kevin Love, so every Reddit comment saying "I love this play" matched. Same issue for `green` (Jeff Green), `white` (Derrick White), `wolf` (Danny Wolf), `black` (Anthony Black). Fix: deleted the five collision-prone aliases, then re-resolved `player_ids` on the existing 257 chunks (no re-embedding needed; the vectors were already correct, only the filter column was wrong). Post-fix top mentions are exactly what you'd expect for May 2026: Wemby 46, LeBron 35, LaMelo 31, Trae 24, Harden 22, SGA 21. Lesson: LLM-generated alias maps need a single-token-word audit before going live.
+
+**PRAW for Reddit ingestion.** Reddit tightened developer registration in 2024 and the approval queue is slow for new accounts. Rejected the OAuth flow entirely and call the public `.json` endpoints (60 req/min/IP, no auth) — same data, no waiting. PRAW can be added back in 30 minutes if developer access ever lands.
+
+**The voyageai Python SDK.** Voyage's official SDK fails to import on Python 3.14 (pydantic v1 + `min_items` in its multimodal-embeddings module). Rejected the SDK and call the REST `/v1/embeddings` endpoint directly via `requests`. Same API surface; Python 3.14 compatibility; ~30 MB less in the dependency tree.
 
 ## Running it locally
 
