@@ -58,6 +58,48 @@ def ask_cmd(
         console.print(f"\n[bold]{result.answer}[/]")
         return
 
+    # --- Stats route ---
+    if result.stats is not None:
+        if result.stats.generated:
+            console.print(
+                Panel(
+                    f"{result.stats.generated.sql}\n\n"
+                    f"params={result.stats.generated.params}\n\n"
+                    f"[dim]{result.stats.generated.explanation}[/]",
+                    title=(
+                        f"Generated SQL (status={result.stats.status} "
+                        f"cost=${result.stats.generated.cost_usd:.6f})"
+                    ),
+                    border_style="magenta",
+                )
+            )
+        if result.stats.status != "ok":
+            console.print(
+                f"[red]stats path status={result.stats.status}:[/] {result.stats.error}"
+            )
+            return
+        if result.stats.execution:
+            ex = result.stats.execution
+            console.print(
+                f"[dim]rows={ex.row_count} elapsed_ms={ex.elapsed_ms:.1f}[/]"
+            )
+        if result.synthesis is not None:
+            footer = (
+                f"\n\n[dim]model={result.synthesis.model} "
+                f"in={result.synthesis.input_tokens} "
+                f"out={result.synthesis.output_tokens} "
+                f"cost=${result.synthesis.cost_usd:.6f}[/]"
+            )
+            console.print(
+                Panel(
+                    result.synthesis.answer + footer,
+                    title="Answer (stats route)",
+                    border_style="green",
+                )
+            )
+        return
+
+    # --- Prose route from here ---
     if result.retrieval is None or not result.retrieval.chunks:
         console.print("\n[yellow]No chunks retrieved.[/]")
         if result.retrieval is not None:

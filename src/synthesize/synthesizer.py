@@ -18,7 +18,13 @@ import anthropic
 from src.config import get_settings
 from src.guardrails import Model, guarded_call, record_usage
 from src.retrieve_prose.filters import ScoredChunk
-from src.synthesize.prompts import SYNTHESIS_SYSTEM_PROMPT, build_user_message
+from src.retrieve_stats.pipeline import StatsResult
+from src.synthesize.prompts import (
+    STATS_SYNTHESIS_SYSTEM_PROMPT,
+    SYNTHESIS_SYSTEM_PROMPT,
+    build_stats_user_message,
+    build_user_message,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +136,66 @@ class Synthesizer:
             cost_usd=rec.cost_usd,
             chunks_supplied=len(chunks),
             declined=declined,
+        )
+
+    def synthesize_stats(
+        self,
+        question: str,
+        stats: StatsResult,
+        *,
+        session_id: str = "synthesize-stats",
+    ) -> SynthesisResult:
+        """Summarize stats rows as a short prose answer.
+
+        The SQL itself is the citation; the UI shows it in the tool-use
+        sidebar. The synthesizer's job is to translate row data into a
+        natural answer that quotes the right numbers without inventing
+        any.
+
+        Raises ValueError if the question is empty or if `stats` is
+        missing the generated SQL or the execution result (caller should
+        only invoke after stats.status == 'ok').
+        """
+        if not question or not question.strip():
+            raise ValueError("question must be non-empty")
+        if stats.execution is None or stats.generated is None:
+            raise ValueError("stats result must have generated SQL and execution")
+
+        user_message = build_stats_user_message(question, stats)
+
+        with guarded_call(
+            session_id=session_id,
+            model=self.model,
+            input_text=STATS_SYNTHESIS_SYSTEM_PROMPT + "\n\n" + user_message,
+            max_output_tokens=self.max_output_tokens,
+        ):
+            response = self._client.messages.create(
+                model=self.model.value,
+                max_tokens=self.max_output_tokens,
+                system=STATS_SYNTHESIS_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": user_message}],
+            )
+
+        answer_text = _extract_text(response)
+        in_tokens = response.usage.input_tokens
+        out_tokens = response.usage.output_tokens
+        rec = record_usage(
+            session_id=session_id,
+            model=self.model,
+            input_tokens=in_tokens,
+            output_tokens=out_tokens,
+        )
+
+        return SynthesisResult(
+            answer=answer_text,
+            citations=[],         # stats: the SQL itself is the citation
+            cited_chunk_ids=[],
+            model=self.model.value,
+            input_tokens=in_tokens,
+            output_tokens=out_tokens,
+            cost_usd=rec.cost_usd,
+            chunks_supplied=0,    # stats: rows, not chunks
+            declined=_looks_declined(answer_text),
         )
 
 
