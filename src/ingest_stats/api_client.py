@@ -106,7 +106,7 @@ class NBAClient:
     """Wrapper that applies the rate limiter, retries, and consistent headers
     around every nba_api call."""
 
-    def __init__(self, limiter: RateLimiter | None = None, timeout_seconds: int = 30) -> None:
+    def __init__(self, limiter: RateLimiter | None = None, timeout_seconds: int = 60) -> None:
         self.limiter = limiter or get_limiter()
         self.timeout_seconds = timeout_seconds
 
@@ -132,7 +132,9 @@ class NBAClient:
         """
         self.limiter.wait()
         logger.debug("nba_api call: %s kwargs=%s", endpoint_factory.__name__, kwargs)
-        # nba_api endpoints accept headers and timeout kwargs.
-        kwargs.setdefault("headers", DEFAULT_HEADERS)
+        # nba_api ships its own NBA_STATS_HEADERS (with cookies + per-version
+        # tweaks) inside library/http.py; passing our own `headers=` dict here
+        # would override that and break the request. Only set the timeout.
+        # If a caller really wants custom headers, they pass them explicitly.
         kwargs.setdefault("timeout", self.timeout_seconds)
         return endpoint_factory(**kwargs)
