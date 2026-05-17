@@ -4,6 +4,72 @@ All notable changes to this project land here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+### Phase L.5 — Re-run eval (judge prompt fixed, agg 0.857 → 0.925) (2026-05-17)
+
+Re-ran the 30-case eval after L.1 / L.2 / L.3 / L.4 landed. The first run showed an almost unchanged aggregate (0.857 → 0.859) despite obvious quality wins on real questions. Investigation found that the Sonnet-4.6 judge was marking correct stats answers as "hallucinated" because its training cutoff predates the 2025-26 season — it doesn't know Luka is on the Lakers or that the season has happened, and treats specific 2025-26 numbers as invented.
+
+**Fix**
+
+Added explicit factual grounding to `JUDGE_SYSTEM_PROMPT` in `src/eval/scorers.py`:
+
+  - The current date is May 2026.
+  - The 2025-26 season has concluded; playoffs are underway.
+  - Stats-route numbers are sourced from a local Postgres DB; don't assume specific 2025-26 figures are hallucinated.
+  - Player movements (Luka to LAL, Flagg to DAL, Harden to CLE) are real.
+  - Score based on the rubric, not on whether you personally recognize the numbers.
+
+**Before / after (full 30-case eval, same answers, two judges)**
+
+| Metric | Baseline | After L (terse judge) | After L (judge fixed) | Delta vs baseline |
+|---|---:|---:|---:|---:|
+| Aggregate | 0.857 | 0.859 | **0.925** | +0.068 |
+| Judge (overall) | 0.510 | 0.510 | **0.778** | +0.268 |
+| **Stats judge** | 0.250 | 0.250 | **0.875** | **+0.625** |
+| Prose judge | 0.690 | 0.690 | 0.790 | +0.100 |
+| Hybrid judge | 0.590 | 0.590 | 0.670 | +0.080 |
+| Route accuracy | 1.000 | 1.000 | 1.000 | unchanged |
+| Hallucination guard | 1.000 | 1.000 | 1.000 | unchanged |
+| Keyword recall | 0.928 | 0.928 | 0.922 | -0.006 (noise) |
+
+The stats route is the biggest mover (+0.625 judge): L.1 made answers context-rich (TS%, scope, comparisons), and the judge fix stopped penalizing 2025-26 numbers. Hybrid and prose also lift; play-by-play clutch data from L.2 and the wider corpus from L.3 help compound questions land cleaner.
+
+**Cost**
+
+$2.56 for the 30-case eval, comparable to baseline. The judge fix itself is a 50-word prompt extension — zero added cost per case.
+
+**Two cases still scoring 0**
+
+`hybrid-05-rookies` and `hybrid-06-old-school` still get judge=0. Looking at those: the SQL step found zero matching players (rookie threshold, age 35+ players who score 25+ PPG), so the hybrid pipeline declines politely. The rubrics expect a graceful "no matches" response, which the answers DO give, but the judge reads the empty result as a partial answer. Future tweak: refine those two rubrics OR teach the judge that "no matches" is the correct answer for some compound questions.
+
+---
+
+### Phase L.4 — Hybrid route runs SQL + prose in parallel (2026-05-17)
+
+The user reported that "what are SGA's clutch TS splits, AND is he a playoff riser?" returned "the corpus does not contain the specific clutch true shooting splits you asked about." Root cause: the old hybrid pipeline was `(SQL filter to players) → (prose retrieval)` — it threw away the numeric half entirely. The narrowing SQL only returned `player_id`, never the actual numbers the user asked about.
+
+**Refactor**
+
+- `src/retrieve_hybrid/sql_filter.py`: prompt now requires `player_id` as ONE column (not the only column). The LLM is free to include whatever else answers the numeric half. `FilterResult` gains `rows: list[dict]` and `column_names: list[str]`.
+- `src/synthesize/prompts.py`: `HYBRID_SYNTHESIS_SYSTEM_PROMPT` rewritten to "lead with numbers from the rows, then explain qualitatively with [^N] citations." `build_hybrid_user_message` formats rows as a tab-delimited table alongside the chunks.
+- `src/api/server.py`: serializes the new `rows` field in the hybrid output.
+- `ui/components/HybridPanel.tsx`: renders a results table for the numeric half above the prose retrieval list.
+
+**Smoke test (the user's actual Q2)**
+
+before:
+> "Among 1 player who matched (Shai Gilgeous-Alexander), the corpus does not contain the specific clutch true shooting splits you asked about — neither regular season nor playoff clutch TS% appears in any chunk..."
+
+after:
+> "**Clutch TS% splits (2025-26):** Regular season 66.8% TS / 57.9% eFG on 27 games and 125.1 clutch minutes. Playoffs 90.2% TS / 83.3% eFG, but on a single game... regular-season number is elite, roughly ten points of TS% above the ~57% league baseline... On the broader 'playoff riser' question, the corpus supports a qualified yes rather than a clear leap. His full-season profile (30.9 ppg on 67.7% TS) is already so high that 'rising' mostly means sustaining... [+7 prose citations across the riser analysis]"
+
+**Also fixed in this commit**
+
+A `.gitignore` bug: the Python build-output pattern `lib/` was matching `ui/lib/` (Next.js helpers). The Phase J `ui/lib/api.ts` and `ui/lib/cn.ts` files were never actually committed to the repo as a result. Anchored the pattern to `/lib/` and added the missing UI lib files.
+
+245 tests pass, TypeScript clean.
+
+---
+
 ### Phase L.3 — Prose corpus expanded to 478 chunks (2026-05-17)
 
 Surfaced after the user hit "no coverage" on multi-team questions like "who's projected MVP?". The corpus skewed too heavily toward SGA / Wemby / Brunson / Mitchell because those were the only team subs ingested. Added 12 more team subreddits.

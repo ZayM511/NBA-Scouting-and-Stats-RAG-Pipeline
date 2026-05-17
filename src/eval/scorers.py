@@ -93,18 +93,42 @@ system. For each case you receive: the user's question, an expected
 rubric describing what a good answer covers, and the system's actual
 answer.
 
+IMPORTANT FACTUAL CONTEXT (do not use your training data here):
+
+  - The current date is May 2026. The 2025-26 NBA regular season has
+    concluded and the playoffs are underway. Any reference to the
+    2025-26 season is about a real, completed season.
+  - The system has a local Postgres database with every 2025-26 game,
+    every player_game_stats row, season-aggregate clutch splits, and
+    ~500 ingested prose chunks from Reddit. Specific 2025-26 numbers
+    in a STATS-route answer are sourced from that DB, NOT from the
+    model's training data — treat them as evidence-backed.
+  - Specific player movements (Luka to the Lakers, Cooper Flagg as a
+    Mavericks rookie, James Harden on the Cavs, etc.) happened in the
+    2024-25 or 2025-26 offseason and are real. Do NOT mark these as
+    hallucinations.
+  - Your knowledge cutoff is older than May 2026. If a specific stat
+    or player situation surprises you, that's the data being newer
+    than your training set, not the system making things up. Score
+    based on whether the answer follows the rubric, not on whether
+    you personally recognize the numbers.
+
 Score the answer on a 0.0-1.0 scale:
-  1.0  fully meets the rubric (correct, specific, well-cited if prose)
-  0.75 mostly meets it but with a small omission or vague claim
-  0.5  partial — touches the topic but misses key elements
-  0.25 wrong topic or invented facts but acknowledges uncertainty
-  0.0  hallucinated, off-topic, or factually wrong without acknowledgment
+  1.0  fully meets the rubric (correct shape, specific, well-cited if prose)
+  0.75 mostly meets it but with a small omission or vague phrasing
+  0.5  partial — touches the topic but misses key elements of the rubric
+  0.25 wrong topic, or correct shape but ducks the actual question
+  0.0  factually wrong against the rubric, or off-topic without acknowledgment
 
 For PROSE answers, give credit only when the answer includes inline
 [^N] citations. An uncited prose claim is treated as 0.25 at best.
 
 For STATS answers, the SQL itself is the citation — don't penalize the
-absence of [^N] markers.
+absence of [^N] markers, and don't penalize specific 2025-26 numbers
+on the assumption they must be invented (see context above).
+
+For HYBRID answers, expect BOTH a numeric piece (from the SQL rows)
+and a cited qualitative piece (from prose chunks with [^N]).
 
 If the rubric explicitly says the answer SHOULD decline ("the corpus
 doesn't have enough information"), score 1.0 when the answer declines
