@@ -4,6 +4,84 @@ All notable changes to this project land here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+### Phase L.3 — Prose corpus expanded to 478 chunks (2026-05-17)
+
+Surfaced after the user hit "no coverage" on multi-team questions like "who's projected MVP?". The corpus skewed too heavily toward SGA / Wemby / Brunson / Mitchell because those were the only team subs ingested. Added 12 more team subreddits.
+
+**Before / after**
+
+| Metric | Before | After | Delta |
+|---|---:|---:|---:|
+| Articles | 228 | 406 | +178 |
+| Chunks | 288 | 478 | +190 |
+| Distinct sources | 7 | 18 | +11 |
+| Chunks with at least one resolved player_id | 273 / 288 (94.8%) | 450 / 478 (94.1%) | resolver still healthy |
+
+**New subs (15 threads each, 8 top-level comments, top/month listing)**
+
+Round 1: r/lakers, r/warriors, r/bostonceltics, r/heat, r/denvernuggets, r/timberwolves
+Round 2: r/sixers, r/Mavericks, r/MkeBucks, r/pacers, r/orlandomagic, r/suns
+
+**Cost**
+
+Voyage embeddings: 52,134 tokens across both rounds = ~$0.009. Zero Reddit rate-limit hits this time (we stayed well under 60 req/min/IP).
+
+**Re-runnable**
+
+Saved the exact invocation as `scripts/ingest-team-subs.ps1`. Run after a bracket change to refresh coverage:
+
+```powershell
+pwsh -File scripts\ingest-team-subs.ps1 -LimitPerSub 25
+```
+
+---
+
+### Phase L.2 — Clutch stats via LeagueDashPlayerClutch (2026-05-17)
+
+Surfaced when the user asked for SGA's clutch TS splits and the system said "the corpus does not contain the specific clutch true shooting splits you asked about." Root cause: the `play_by_play` table was empty and `player_game_stats` has no `is_clutch_data=TRUE` rows for the 2025-26 season. Added a season-aggregate clutch table sourced from `LeagueDashPlayerClutch` (league standard: last 5 minutes, score margin ≤ 5).
+
+**Added**
+
+- `src/schema/migrations/002_player_clutch_stats.sql`: new table keyed on (player_id, season, season_type). Stores totals (gp, min, pts, fgm/a, fg3m/a, ftm/a, rebs, ast, tov, stl, blk, +/-) plus pre-cached `ts_pct` and `efg_pct` (nullable when undefined).
+- `src/ingest_stats/clutch.py`: one `LeagueDashPlayerClutch` call per season_type returns the entire league; we skip GP=0 and filter to known players for FK safety.
+- CLI: `python -m src.ingest_stats.cli player-clutch --season-type {Regular Season|Playoffs}`.
+- `src/retrieve_stats/schema.py`: documented the new table + a worked SGA example so the SQL generator knows when to use it.
+- Tests: 6 unit tests for the helpers (`_ts_pct`, `_efg_pct`, `_row_from_endpoint`), schema-description fixture refactored to scan all migrations instead of just 001.
+
+**Ingested**
+
+| Season type | Players with clutch data | API time |
+|---|---:|---:|
+| Regular Season | 492 | ~1.5s |
+| Playoffs | 127 | ~1.0s |
+
+**Smoke test**
+
+For "What is SGA shooting in the clutch this season, regular season vs playoffs?" the router now picks `stats` (previously `hybrid`, since the only narrative half it had was "is he a riser") and the answer carries actual numbers: "Regular season (27 clutch games, 125.1 clutch minutes): 51.5% FG, 35.1% from three, 85.3% FT, 66.8% TS%, 57.9% eFG%. The 66.8 TS% in clutch is roughly 10 points above league-average (~57%), elite shot-making under pressure on a healthy 175-point sample."
+
+Tests: 245 pass (was 235; +6 clutch helpers, +4 schema).
+
+---
+
+### Phase L.1 — Stats prompt rewrite for context-rich answers (2026-05-17)
+
+The stats synthesis judge was 0.25 on the Phase I baseline eval because the prompt enforced one-sentence answers. "31.1 PPG." is correct but useless. Rewrote `STATS_SYNTHESIS_SYSTEM_PROMPT` to require:
+
+1. Lead with the exact number from the row.
+2. Add scope (split, season, games played, team).
+3. Derive composite shooting metrics (TS%, eFG%) from raw fields when the row has the inputs.
+4. One light comparison sentence using widely-known baselines (2025-26 league-average TS% ~57%, league pace ~100).
+5. Name missing inputs explicitly when a derived metric needs data not in the row.
+
+**Before / after** on "What is SGA averaging this season in points and true shooting?":
+
+- before: `"SGA is averaging 31.1 PPG."`
+- after: `"Shai Gilgeous-Alexander is averaging 31.1 points per game on a .682 true shooting percentage through 68 regular-season games for OKC in 2025-26. That TS mark sits roughly 11 points above this season's league-average TS% (~57%), making the scoring volume even more impressive given the efficiency."`
+
+61 synthesize + retrieve_stats tests still pass. Full eval re-run is in Phase L.5.
+
+---
+
 ### Phase C — Top-30 enrichment (Opus-authored scouting summaries) (2026-05-17)
 
 One Opus 4.7 scouting summary per top-30 player, stored as `articles_chunks` rows with `article_type='authored_summary'`. The summaries surface naturally through the existing hybrid retrieval (BM25 + dense + Cohere Rerank), so any prose or hybrid question that touches a top-30 player gets richer context.
