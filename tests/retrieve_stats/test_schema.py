@@ -12,9 +12,10 @@ from src.retrieve_stats.schema import SCHEMA_DESCRIPTION
 
 
 @pytest.fixture(scope="module")
-def init_sql() -> str:
-    path = Path(__file__).parent.parent.parent / "src" / "schema" / "migrations" / "001_init.sql"
-    return path.read_text(encoding="utf-8").lower()
+def all_migrations_sql() -> str:
+    """Concatenated text of every .sql file under migrations/, lowercased."""
+    mig_dir = Path(__file__).parent.parent.parent / "src" / "schema" / "migrations"
+    return "\n".join(p.read_text(encoding="utf-8") for p in sorted(mig_dir.glob("*.sql"))).lower()
 
 
 REQUIRED_TABLES = (
@@ -23,6 +24,7 @@ REQUIRED_TABLES = (
     "games",
     "player_game_stats",
     "play_by_play",
+    "player_clutch_stats",
     "articles_chunks",
 )
 
@@ -38,6 +40,8 @@ REQUIRED_COLUMNS = (
     ("player_game_stats", "is_clutch_data"),
     ("player_game_stats", "ts_pct"),
     ("player_game_stats", "pts"),
+    ("player_clutch_stats", "ts_pct"),
+    ("player_clutch_stats", "season_type"),
     ("articles_chunks", "player_ids"),
 )
 
@@ -57,11 +61,11 @@ def test_schema_description_includes_column(table: str, column: str) -> None:
 
 
 @pytest.mark.parametrize("table", REQUIRED_TABLES)
-def test_init_sql_actually_has_table(table: str, init_sql: str) -> None:
-    """Sanity check: the migration file really has these tables (so the
+def test_migrations_actually_have_table(table: str, all_migrations_sql: str) -> None:
+    """Sanity check: a migration file really has these tables (so the
     description above can't drift into a fantasy schema)."""
-    assert f"create table if not exists {table}" in init_sql, (
-        f"migration 001_init.sql missing CREATE TABLE for {table}"
+    assert f"create table if not exists {table}" in all_migrations_sql, (
+        f"no migration creates table {table}"
     )
 
 

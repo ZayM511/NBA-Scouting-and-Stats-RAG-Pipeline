@@ -73,6 +73,23 @@ play_by_play
   shot_made BOOLEAN
   shot_type TEXT           -- '2PT', '3PT', 'FT'
 
+player_clutch_stats        -- SEASON-aggregate clutch totals (one row per
+                           -- player + season + season_type). "Clutch" =
+                           -- last 5 minutes with score margin <= 5.
+                           -- Use THIS table for any clutch question;
+                           -- player_game_stats does not have clutch data.
+  player_id INT FK players(player_id)
+  season TEXT              -- e.g. '2025-26'
+  season_type TEXT         -- 'Regular Season' or 'Playoffs'
+  gp INT                   -- games WITH clutch minutes (not total games)
+  min_total REAL           -- total clutch minutes across those games
+  pts INT, fgm INT, fga INT, fg3m INT, fg3a INT, ftm INT, fta INT
+  oreb INT, dreb INT, reb INT, ast INT, tov INT, stl INT, blk INT
+  pf INT, pfd INT, plus_minus INT
+  ts_pct REAL              -- pre-cached; nullable if fga + fta = 0
+  efg_pct REAL             -- pre-cached; nullable if fga = 0
+  PRIMARY KEY (player_id, season, season_type)
+
 articles_chunks
   id BIGSERIAL PK
   article_id TEXT FK
@@ -97,6 +114,9 @@ CONVENTIONS:
 - For "leaders" / rankings, use ORDER BY ... DESC LIMIT N.
 - Always restrict to NOT is_clutch_data unless the question explicitly
   asks for clutch stats (otherwise the same game contributes twice).
+- For clutch questions, ALWAYS use player_clutch_stats (season-aggregate)
+  rather than trying to compute clutch from player_game_stats. The
+  per-game table currently has zero is_clutch_data=TRUE rows.
 
 EXAMPLE WELL-FORMED QUERIES:
 
@@ -122,4 +142,20 @@ WHERE p.name = 'Victor Wembanyama'
   AND NOT pgs.is_clutch_data
   AND g.is_playoff = TRUE
   AND g.season = '2025-26';
+
+-- Q: SGA's clutch TS% splits for reg season vs. playoffs this year
+SELECT
+    season_type,
+    gp,
+    ROUND(min_total::numeric, 1) AS clutch_min,
+    pts,
+    fga,
+    fta,
+    ROUND(ts_pct::numeric, 3) AS ts_pct,
+    ROUND(efg_pct::numeric, 3) AS efg_pct
+FROM player_clutch_stats pcs
+JOIN players p ON p.player_id = pcs.player_id
+WHERE p.name = 'Shai Gilgeous-Alexander'
+  AND season = '2025-26'
+ORDER BY season_type;
 """

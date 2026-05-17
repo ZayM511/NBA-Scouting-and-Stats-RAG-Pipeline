@@ -17,6 +17,7 @@ import sys
 import typer
 from rich.console import Console
 
+from src.ingest_stats.clutch import sync_player_clutch
 from src.ingest_stats.games import sync_games
 from src.ingest_stats.player_game_stats import sync_player_game_stats
 from src.ingest_stats.players import sync_active_players
@@ -77,6 +78,19 @@ def player_game_stats(
     n = sync_player_game_stats(season=season, season_type=season_type)
     console.print(
         f"[green]Upserted {n} player-game rows ({season}, {season_type}).[/]"
+    )
+
+
+@app.command("player-clutch")
+def player_clutch(
+    season: str = DEFAULT_SEASON,
+    season_type: str = typer.Option("Regular Season", help='"Regular Season" or "Playoffs".'),
+) -> None:
+    """Refresh season-aggregate clutch stats for the given (season, season_type)."""
+    _configure_logging()
+    n = sync_player_clutch(season=season, season_type=season_type)
+    console.print(
+        f"[green]Upserted {n} clutch rows ({season}, {season_type}).[/]"
     )
 
 
