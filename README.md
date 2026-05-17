@@ -72,7 +72,7 @@ Screenshots land in `docs/screenshots/` once the UI ships.
 | Python 3.11+ with `uv` | Fast dep management, lockfile reproducibility |
 | Postgres 16 + pgvector | One DB for SQL and vectors; hybrid query in one transaction |
 | `nba_api` | Official NBA stats endpoints; free |
-| `requests` + BeautifulSoup, PRAW | Article scraping and Reddit |
+| `requests` + BeautifulSoup | Article scraping; also Reddit via the public `.json` endpoints (no OAuth — Reddit's 2024 developer rules made registration friction; the JSON path stays free and read-only) |
 | Voyage `voyage-3-large` (1024-dim) | Best general-purpose embedding model in 2026 |
 | Cohere Rerank 3.5 | Two-stage retrieval: cheap recall, then a smart rerank |
 | Claude Sonnet 4.6 | Router and text-to-SQL generation |

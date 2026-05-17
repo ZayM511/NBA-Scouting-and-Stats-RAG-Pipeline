@@ -20,8 +20,10 @@ dependencies = [
     "requests>=2.32.0",
     "beautifulsoup4>=4.12.0",
     "lxml>=5.3.0",
-    # Reddit
-    "praw>=7.8.0",
+    # Reddit: public JSON endpoints (no OAuth). Plain requests is sufficient;
+    # PRAW is intentionally NOT a dependency. Reddit tightened developer
+    # registration in 2024, so we skip OAuth and read public .json URLs at
+    # 60 req/min/IP. Swap back to PRAW if a developer registration is approved.
     # Postgres + pgvector
     "psycopg[binary,pool]>=3.2.0",
     "pgvector>=0.3.0",
@@ -95,7 +97,7 @@ warn_redundant_casts = true
 warn_unused_ignores = true
 
 [[tool.mypy.overrides]]
-module = ["nba_api.*", "praw.*", "cohere.*", "voyageai.*", "braintrust.*", "pgvector.*"]
+module = ["nba_api.*", "cohere.*", "voyageai.*", "braintrust.*", "pgvector.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

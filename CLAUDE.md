@@ -18,7 +18,7 @@ A Claude Sonnet 4.6 router decides which path each question takes. Coverage: all
 
 - Python 3.11+, `uv` for dependency management
 - Postgres 16 + pgvector (local via docker compose)
-- `nba_api` for stats; `requests` + BeautifulSoup for articles; PRAW for Reddit
+- `nba_api` for stats; `requests` + BeautifulSoup for articles; `requests` against Reddit's public `.json` endpoints for r/nba (no OAuth — see `.env.example`)
 - Voyage AI `voyage-3-large` (1024-dim) embeddings
 - Cohere Rerank 3.5
 - Anthropic Claude: Sonnet 4.6 for router and text-to-SQL, Opus 4.7 for synthesis, Haiku 4.5 for cheap pre-checks (model cascade)
