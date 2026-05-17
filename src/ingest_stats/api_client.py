@@ -94,12 +94,28 @@ class RateLimiter:
             self._last_call = time.monotonic()
 
 
-# Module-level singleton. Override in tests via monkeypatch if you need.
-_DEFAULT_LIMITER = RateLimiter()
+# Module-level singletons. Override in tests via monkeypatch if you need.
+#
+# The 'stats' limiter applies to stats.nba.com endpoints (LeagueGameLog,
+# LeagueDashPlayerClutch, ScheduleLeagueV2Int, etc.) — they share the
+# 600 ms empirical safe floor.
+#
+# The 'live' limiter applies to cdn.nba.com / live data endpoints
+# (live.nba.endpoints.ScoreBoard) — different host, no cookie dance, and
+# we want to be able to poll once a minute for live scores without the
+# rate limiter slowing us down. 0.0 = no minimum delay (the wait() call
+# is still safe to invoke).
+_DEFAULT_LIMITER = RateLimiter(min_interval_seconds=0.6)
+_LIVE_LIMITER = RateLimiter(min_interval_seconds=0.0)
 
 
 def get_limiter() -> RateLimiter:
     return _DEFAULT_LIMITER
+
+
+def get_live_limiter() -> RateLimiter:
+    """Looser limiter for the live (cdn.nba.com) host."""
+    return _LIVE_LIMITER
 
 
 class NBAClient:

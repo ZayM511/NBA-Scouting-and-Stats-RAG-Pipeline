@@ -19,9 +19,11 @@ from rich.console import Console
 
 from src.ingest_stats.clutch import sync_player_clutch
 from src.ingest_stats.games import sync_games
+from src.ingest_stats.live import sync_live_scoreboard
 from src.ingest_stats.player_game_stats import sync_player_game_stats
 from src.ingest_stats.players import sync_active_players
 from src.ingest_stats.refresh import daily_refresh
+from src.ingest_stats.schedule import sync_upcoming_schedule
 from src.ingest_stats.teams import sync_teams
 
 console = Console()
@@ -92,6 +94,50 @@ def player_clutch(
     console.print(
         f"[green]Upserted {n} clutch rows ({season}, {season_type}).[/]"
     )
+
+
+@app.command()
+def live() -> None:
+    """One-shot pull of today's scoreboard (live + scheduled + final today)."""
+    _configure_logging()
+    n = sync_live_scoreboard()
+    console.print(f"[green]Live scoreboard: upserted {n} games.[/]")
+
+
+@app.command()
+def schedule(
+    season: str = DEFAULT_SEASON,
+    days_ahead: int = typer.Option(14, help="How many days into the future to keep."),
+) -> None:
+    """One-shot pull of the upcoming schedule (next N days)."""
+    _configure_logging()
+    n = sync_upcoming_schedule(season=season, days_ahead=days_ahead)
+    console.print(f"[green]Schedule: upserted {n} upcoming games ({season}, +{days_ahead}d).[/]")
+
+
+@app.command("live-loop")
+def live_loop(
+    interval_seconds: int = typer.Option(60, help="Seconds between scoreboard pulls."),
+    max_iterations: int = typer.Option(0, help="Stop after N iterations (0 = forever)."),
+) -> None:
+    """Local-dev convenience: run sync_live_scoreboard on a loop. The
+    production path uses APScheduler inside the FastAPI lifespan; this
+    command is for when the API isn't running but you want to populate
+    the games table during a live NBA game."""
+    import time
+
+    _configure_logging()
+    i = 0
+    while True:
+        i += 1
+        try:
+            n = sync_live_scoreboard()
+            console.print(f"[dim]tick {i}:[/] upserted {n} games")
+        except Exception as exc:  # noqa: BLE001
+            console.print(f"[red]tick {i} failed:[/] {exc}")
+        if max_iterations and i >= max_iterations:
+            break
+        time.sleep(interval_seconds)
 
 
 @app.command()

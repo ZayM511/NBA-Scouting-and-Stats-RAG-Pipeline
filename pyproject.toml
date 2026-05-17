@@ -44,6 +44,7 @@ dependencies = [
     # HTTP API for the Next.js UI
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
+    "apscheduler>=3.10",
 ]
 
 [dependency-groups]

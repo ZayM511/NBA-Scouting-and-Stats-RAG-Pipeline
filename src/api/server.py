@@ -21,14 +21,22 @@ import os
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from src.api.header import router as header_router
 from src.config import get_settings
 from src.ingest_prose.embedder import Embedder
+from src.ingest_stats.live import sync_live_scoreboard
+from src.ingest_stats.schedule import sync_upcoming_schedule
+from src.observability.braintrust_api import init as bt_init, log_ask as bt_log_ask
 from src.retrieve_prose.filters import ChunkFilters
 from src.retrieve_prose.rerank import Reranker
 from src.retrieve_stats.sql_generator import SQLGenerator
@@ -173,6 +181,7 @@ class Services:
 
 
 _services: Services | None = None
+_scheduler: AsyncIOScheduler | None = None
 
 
 def _get_services() -> Services:
@@ -181,10 +190,36 @@ def _get_services() -> Services:
     return _services
 
 
+def _safe_live_tick() -> None:
+    """Wrap sync_live_scoreboard so any failure logs but doesn't kill the job."""
+    try:
+        n = sync_live_scoreboard()
+        logger.debug("scheduler live tick: %d games", n)
+    except Exception:  # noqa: BLE001
+        logger.exception("scheduler live tick raised")
+
+
+def _safe_schedule_tick() -> None:
+    try:
+        n = sync_upcoming_schedule()
+        logger.info("scheduler schedule tick: upserted %d upcoming games", n)
+    except Exception:  # noqa: BLE001
+        logger.exception("scheduler schedule tick raised")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Initialize long-lived service instances on startup, close on shutdown."""
-    global _services
+    """Initialize long-lived service instances on startup, close on shutdown.
+
+    Also boots APScheduler with two jobs:
+      * live: pulls today's scoreboard every 60 seconds (runs immediately)
+      * schedule: pulls the next 14 days of upcoming games at startup,
+        then daily at 12:00 UTC
+    Both jobs use coalesce=True + max_instances=1 so a slow tick can't
+    pile up workers, and both wrap failures so the API stays serving even
+    when nba_api / balldontlie are down.
+    """
+    global _services, _scheduler
     settings = get_settings()
     logging.basicConfig(
         level=settings.log_level,
@@ -192,10 +227,44 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         datefmt="%Y-%m-%d %H:%M:%S",
     )
     _services = Services()
+    # Initialize Braintrust here (not at import time) so unit tests that import
+    # the module without an API key don't hit the network.
+    bt_init()
+
+    try:
+        _scheduler = AsyncIOScheduler()
+        _scheduler.add_job(
+            _safe_live_tick,
+            trigger=IntervalTrigger(seconds=60),
+            id="live_scoreboard",
+            coalesce=True,
+            max_instances=1,
+            next_run_time=datetime.now(timezone.utc),
+        )
+        _scheduler.add_job(
+            _safe_schedule_tick,
+            trigger=CronTrigger(hour=12, minute=0, timezone="UTC"),
+            id="upcoming_schedule",
+            coalesce=True,
+            max_instances=1,
+            next_run_time=datetime.now(timezone.utc) + timedelta(seconds=5),
+        )
+        _scheduler.start()
+        logger.info("APScheduler started: live every 60s, schedule daily 12:00 UTC.")
+    except Exception:  # noqa: BLE001
+        logger.exception("APScheduler failed to start; live data will be stale")
+        _scheduler = None
+
     logger.info("API services warmed.")
     try:
         yield
     finally:
+        if _scheduler is not None:
+            try:
+                _scheduler.shutdown(wait=False)
+            except Exception:  # noqa: BLE001
+                logger.exception("scheduler shutdown failed")
+            _scheduler = None
         if _services is not None:
             _services.close()
             _services = None
@@ -230,6 +299,8 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
+
+app.include_router(header_router)
 
 
 # --------------------------------------------------------------------------- #
@@ -288,7 +359,19 @@ def ask_endpoint(req: AskRequest) -> AskResponse:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     elapsed_ms = (time.perf_counter() - start) * 1000
 
-    return _to_response(req.question, result, elapsed_ms)
+    response = _to_response(req.question, result, elapsed_ms)
+
+    # Fire-and-forget Braintrust span. Serialize via model_dump so the trace
+    # mirrors what the client receives — easier to debug from the UI.
+    bt_log_ask(
+        question=req.question,
+        filters={"player_ids": req.player_ids, "source": req.source},
+        top_k=req.top_k,
+        response_payload=response.model_dump(),
+        elapsed_ms=elapsed_ms,
+    )
+
+    return response
 
 
 # --------------------------------------------------------------------------- #
