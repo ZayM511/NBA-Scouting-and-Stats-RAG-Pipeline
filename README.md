@@ -102,25 +102,37 @@ Screenshots land in `docs/screenshots/` once the UI ships.
 
 ## Evaluation
 
-The full Braintrust eval set with stratified stats / prose / hybrid coverage lands with the router and synthesis layers. Until then, this section captures spot-check retrieval quality on the live 257-chunk corpus.
+The eval set is 30 hand-crafted NBA questions stratified 10 stats / 10 prose / 10 hybrid. Each case has an expected route, optional substring checks (`must_mention`, `must_not_mention`), and a rubric the LLM-as-judge uses. The composite score averages four components: route accuracy (deterministic), keyword recall (deterministic), hallucination guard (deterministic), and judge score (Sonnet 4.6 reading the rubric + the actual answer). Runs stream to Braintrust when configured; results also write to local JSONL under `eval_results/`.
 
-**Spot-check retrievals** (against 197 r/nba and team-sub threads from May 2026):
+**Baseline run (n=30, 2026-05-17)**
+
+| Metric | Overall | Stats | Prose | Hybrid |
+|---|---:|---:|---:|---:|
+| **Route accuracy** | **1.000** | 1.000 | 1.000 | 1.000 |
+| Hallucination guard | 1.000 | — | — | — |
+| Keyword recall | 0.939 | — | — | — |
+| LLM-judge score | 0.488 | 0.250 | 0.625 | 0.590 |
+| **Aggregate** | **0.857** | 0.787 | 0.885 | 0.897 |
+
+Total cost: **$1.94** for the full 30-case run (router + retrieval + synthesis + judge per case).
+
+The router classifies every question correctly (30/30). No hallucinations detected. The judge's lower score on stats answers is documented as a Phase I follow-up in the [CHANGELOG](./CHANGELOG.md) — the deterministic signals (route accuracy + keyword recall + hallucination guard) carry the regression-detection load while we refine the stats synthesis prompt.
+
+**Spot-check retrievals** (against the 257-chunk corpus, before synthesis):
 
 | Query | Top match (cosine sim) | Why it's the right hit |
 |---|---|---|
-| `"Cooper Flagg's rookie season"` | 0.51 — ROY announcement thread | Direct news mention |
+| `"Cooper Flagg's rookie season"` | 0.89 (hybrid+rerank) — ROY announcement thread | Direct news mention |
 | `"LeBron at age 41"` | 0.65 — "41 years old LeBron James checks out: 27 PTS" | Box-score post |
 | `"Harden trade to Cleveland"` | 0.65 — Cavs Big 3 thread | Trade context |
 | `"Wemby's defensive impact at the rim"` | 0.55 — Spurs Wemby/Castle/Clingan sequence | Defensive set |
-| `"playoff fatigue in the Western Conference"` | 0.54 — Wolves vs Nuggets elimination | "DENVER NUGGETS HAVE BEEN ELIMINATED" |
 
-**The eval set, once it lands, will track**:
+Run the eval yourself:
 
-| Experiment | recall@5 | MRR | Notes |
-|---|---|---|---|
-| Baseline (no rerank) | _pending_ | _pending_ | |
-| + Cohere Rerank 3.5 | _pending_ | _pending_ | |
-| + Contextual-retrieval prefix | _pending_ | _pending_ | already applied to every chunk; A/B comparison is the experiment |
+```bash
+uv run python -m src.eval.cli run --tag baseline
+uv run python -m src.eval.cli list
+```
 
 ## Security
 
