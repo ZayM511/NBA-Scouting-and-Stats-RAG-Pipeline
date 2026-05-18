@@ -178,7 +178,7 @@ function CountdownTimer({ iso }: { iso: string }) {
   return (
     <div
       data-testid="upcoming-countdown"
-      className="inline-flex items-center gap-1 rounded-lg border bg-bg-elev/60 px-1.5 py-1 backdrop-blur-md"
+      className="inline-flex h-12 items-center gap-1 rounded-xl border bg-bg-elev/60 px-1.5 backdrop-blur-md"
       style={{
         borderColor: isImminent
           ? "rgba(251,113,133,0.55)"
@@ -220,29 +220,26 @@ function DigitCell({
   const color = tone === "rose" ? "#fda4af" : "#ffb380";
   const bg = tone === "rose" ? "rgba(251,113,133,0.10)" : "rgba(255,106,31,0.10)";
   return (
-    <span className="relative inline-flex flex-col items-center px-1">
+    <span
+      aria-label={`${value} ${label}`}
+      className="relative inline-flex items-center"
+    >
       <span
-        className="block min-w-[1.7ch] rounded-md px-1 text-center font-mono text-[15px] font-semibold tabular-nums leading-none"
+        className="block min-w-[2.2ch] rounded-lg px-1.5 py-1 text-center font-mono text-[19px] font-bold tabular-nums leading-none"
         style={{ color, background: bg }}
       >
         <AnimatePresence mode="popLayout" initial={false}>
           <motion.span
             key={padded}
-            initial={{ y: -8, opacity: 0 }}
+            initial={{ y: -10, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 8, opacity: 0 }}
-            transition={{ duration: 0.18, ease: "easeOut" }}
-            className="block py-0.5"
+            exit={{ y: 10, opacity: 0 }}
+            transition={{ duration: 0.14, ease: "easeOut" }}
+            className="block"
           >
             {padded}
           </motion.span>
         </AnimatePresence>
-      </span>
-      <span
-        className="mt-0.5 text-[8.5px] uppercase tracking-[0.18em]"
-        style={{ color: "rgba(161,161,170,0.85)" }}
-      >
-        {label}
       </span>
     </span>
   );
@@ -251,7 +248,7 @@ function DigitCell({
 function Sep() {
   return (
     <span
-      className="font-mono text-[15px] font-semibold leading-none"
+      className="font-mono text-[19px] font-bold leading-none"
       style={{ color: "rgba(161,161,170,0.55)" }}
       aria-hidden="true"
     >
@@ -272,31 +269,37 @@ export function TopRowUpcoming({ game }: { game: UpcomingGame }) {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -4 }}
       transition={{ duration: 0.3 }}
-      className="relative flex h-full items-center gap-3 rounded-xl border border-[rgba(255,106,31,0.35)] bg-surface/55 px-3 backdrop-blur-xl"
+      className="relative flex h-full items-center gap-2.5 rounded-xl border border-[rgba(255,106,31,0.35)] bg-surface/55 pl-3 pr-5 backdrop-blur-xl"
       style={{
         background: `linear-gradient(90deg, ${hexA(game.away.primary, 0.22)} 0%, rgba(7,7,10,0.55) 35%, rgba(7,7,10,0.55) 65%, ${hexA(game.home.primary, 0.22)} 100%)`,
       }}
     >
       <Sweep />
-      <div className="flex items-center gap-1.5 text-[11.5px] font-semibold uppercase tracking-[0.16em] text-[#ffb380] whitespace-nowrap">
-        <Flame className="h-3.5 w-3.5" />
+      <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.10em] text-[#ffb380] whitespace-nowrap">
+        <Flame className="h-3 w-3 shrink-0" />
         <span>{game.label}</span>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1">
         <TeamShield team={game.away} side="left" size="md" rotate={0} />
-        <span className="text-[18px] font-semibold text-text">{game.away.abbr}</span>
-        <span className="text-[10.5px] uppercase tracking-wider text-text-dim">@</span>
-        <span className="text-[18px] font-semibold text-text">{game.home.abbr}</span>
+        <span className="text-[14px] font-semibold text-text">{game.away.abbr}</span>
+        <span className="text-[10px] uppercase tracking-wider text-text-dim">@</span>
+        <span className="text-[14px] font-semibold text-text">{game.home.abbr}</span>
         <TeamShield team={game.home} side="left" size="md" rotate={0} />
       </div>
-      <CountdownTimer iso={game.tipoff_utc} />
-      <span
-        data-testid="upcoming-local-time"
-        className="hidden lg:inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-[12px] text-text-muted"
-      >
-        <Clock className="h-3.5 w-3.5 shrink-0" />
-        <span className="whitespace-nowrap tabular-nums">{userTime}</span>
-      </span>
+      {/* Countdown + local-time always sit on the same row inside the
+          pill. The banner widens at every viewport to fit both. The local
+          time gets a generous ml + pr nudge so it sits visibly toward the
+          right edge of the badge instead of tucked against the countdown. */}
+      <div className="flex flex-row items-center gap-3">
+        <CountdownTimer iso={game.tipoff_utc} />
+        <span
+          data-testid="upcoming-local-time"
+          className="ml-0 mr-8 inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap text-[11px] text-text-muted tabular-nums"
+        >
+          <Clock className="h-3.5 w-3.5 shrink-0" />
+          <span className="whitespace-nowrap">{userTime}</span>
+        </span>
+      </div>
     </motion.div>
   );
 }
@@ -307,10 +310,10 @@ function Sweep() {
   return (
     <motion.div
       aria-hidden="true"
-      className="pointer-events-none absolute inset-y-0 -left-1/4 w-1/2 opacity-25"
+      className="pointer-events-none absolute inset-y-0 -left-1/4 w-1/2 opacity-15"
       initial={{ x: "-20%" }}
       animate={{ x: "240%" }}
-      transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+      transition={{ duration: 9, repeat: Infinity, ease: "linear" }}
       style={{
         background:
           "linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.16) 50%, transparent 70%)",

@@ -43,9 +43,13 @@ export function Hero({ onSuggestion, runKey = 0 }: Props) {
     <div className="relative isolate flex h-full w-full items-center justify-center overflow-hidden px-4">
       <div className="grid-mask absolute inset-0 -z-10 opacity-50" />
 
-      {/* Orb — dominant glowing sun behind the foreground content. */}
+      {/* Orb — dominant glowing sun behind the foreground content. The
+          wrapper is absolute inside Hero so the orb is horizontally
+          centered with the "Ball Knowledge Oracle" title (also centered
+          in the chat column) instead of drifting to the viewport center.
+          Sized so it stays within the chat column's bounds. */}
       <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 flex justify-center">
-        <div className="relative h-[64vh] w-[64vh] max-h-[700px] max-w-[700px] -mt-[8vh]">
+        <div className="relative h-[60vh] w-[60vh] max-h-[620px] max-w-[620px] mt-[2vh]">
           <div
             className="orb-pulse absolute inset-[-20%] rounded-full blur-3xl"
             style={{

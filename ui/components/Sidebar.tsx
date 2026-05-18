@@ -138,21 +138,27 @@ function Section({
 }
 
 function EmptyTrace({ error = false }: { error?: boolean }) {
+  // The sidebar wrapper is transparent on the home screen so the orb glow
+  // extends across the viewport, but the empty-trace messaging itself needs
+  // to read as a foreground card rather than blending into the background.
+  // Wrap the copy in a solid, bordered panel so it pops in front of the orb.
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-3 px-8 text-center">
-      <div className="relative h-12 w-12">
-        <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle,_rgba(255,106,31,0.30)_0%,_transparent_70%)] blur-xl" />
-        <div className="relative grid h-full w-full place-items-center rounded-full border hairline bg-surface-2/80">
-          <Compass className="h-5 w-5 text-text-muted" />
+    <div className="flex h-full items-center justify-center px-5">
+      <div className="flex w-full max-w-[300px] flex-col items-center gap-3 rounded-2xl border hairline-strong bg-bg-elev px-6 py-7 text-center shadow-[0_18px_60px_-20px_rgba(0,0,0,0.85)]">
+        <div className="relative h-12 w-12">
+          <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle,_rgba(255,106,31,0.30)_0%,_transparent_70%)] blur-xl" />
+          <div className="relative grid h-full w-full place-items-center rounded-full border hairline bg-surface-2/80">
+            <Compass className="h-5 w-5 text-text-muted" />
+          </div>
         </div>
+        <p className="text-[12.5px] font-medium text-text-muted">
+          {error ? "No trace available." : "The trace will appear here."}
+        </p>
+        <p className="text-[11.5px] leading-5 text-text-dim">
+          Router decisions, retrieved chunks, SQL, and citations land in this
+          panel after each question.
+        </p>
       </div>
-      <p className="text-[12.5px] font-medium text-text-muted">
-        {error ? "No trace available." : "The trace will appear here."}
-      </p>
-      <p className="max-w-[220px] text-[11.5px] leading-5 text-text-dim">
-        Router decisions, retrieved chunks, SQL, and citations land in this
-        panel after each question.
-      </p>
     </div>
   );
 }

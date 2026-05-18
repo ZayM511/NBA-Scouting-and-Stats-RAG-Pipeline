@@ -108,17 +108,20 @@ export function Header({ healthOk, canGoHome, onHome }: Props) {
             </div>
           </motion.button>
 
-          {/* Center: NBA season badge geometrically centered in the free
-              space between brand and the state banner. */}
+          {/* NBA season badge floats between the brand and the live-updates
+              pill. Two flex-1 spacers on either side absorb slack equally
+              so the badge ends up centered in the empty space between the
+              two anchors regardless of viewport width. */}
           <div className="flex-1" />
           <NBASeasonBadge />
           <div className="flex-1" />
 
-          {/* State banner — h-16 matches the NBA badge height (py-2 + h-12).
-              Widened from 640->720 so the upcoming variant's "5:30 PM PDT"
-              local-time row fits on one line next to the countdown timer. */}
+          {/* State banner — h-16 matches the NBA badge height (h-16 outer).
+              The upcoming variant always shows countdown + "5:30 PM PDT"
+              on the same row, so the pill widens at each viewport step to
+              fit both inline. 560 at md/lg, 640 at 1366+, 720 at 1440+. */}
           <div className="hidden min-w-0 items-center justify-end md:flex">
-            <div className="h-16 w-[720px] max-w-[720px]">
+            <div className="h-16 w-[560px] min-[1366px]:w-[640px] min-[1440px]:w-[720px]">
               <HeaderStateBanner payload={payload} err={err} />
             </div>
           </div>

@@ -237,6 +237,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # the module without an API key don't hit the network.
     bt_init()
 
+    # Surface the active guardrail values on startup so it's obvious whether
+    # a .env edit was picked up (Settings is lru_cached for the life of the
+    # process — the only way to change these is to restart).
+    logger.info(
+        "guardrails: session_cost_ceiling_usd=$%.2f, hourly_breaker_usd=$%.2f, "
+        "max_input=%d, max_output=%d",
+        settings.session_cost_ceiling_usd,
+        settings.hourly_cost_circuit_breaker_usd,
+        settings.max_input_tokens_per_query,
+        settings.max_output_tokens_per_query,
+    )
+
     try:
         _scheduler = AsyncIOScheduler()
         _scheduler.add_job(

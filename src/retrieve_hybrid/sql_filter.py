@@ -292,7 +292,6 @@ def _extract_player_ids(rows: list[dict[str, Any]], cols: list[str]) -> list[int
 # AND/OR connectors.
 _POSITION_PREDICATE_RE = re.compile(
     r"""
-    (?ix)                                # ignore case + verbose
     (?:\bAND\s+|\bOR\s+)?                # optional preceding connector
     \(?                                  # optional opening paren
     \s*(?:[a-z_][\w]*\.)?position\s*     # optional alias.position
@@ -300,7 +299,8 @@ _POSITION_PREDICATE_RE = re.compile(
     (?:%\([^)]+\)s|'[^']*'|\([^)]*\))    # %(name)s OR 'literal' OR (IN list)
     \s*\)?                               # optional closing paren
     (?:\s+(?:AND|OR)\s+)?                # optional trailing connector
-    """
+    """,
+    re.IGNORECASE | re.VERBOSE,
 )
 
 

@@ -99,7 +99,6 @@ export function BasketballOrb({
  */
 function BasketballModel() {
   const group = useRef<THREE.Group>(null);
-  const mouse = useRef({ x: 0, y: 0 });
   const { scene } = useGLTF(MODEL_PATH);
 
   const cloned = useMemo(() => {
@@ -127,17 +126,11 @@ function BasketballModel() {
     return c;
   }, [scene]);
 
-  useFrame((state, delta) => {
+  useFrame((_, delta) => {
     const g = group.current;
     if (!g) return;
     g.rotation.y += delta * 0.28;
     g.rotation.x += delta * 0.07;
-
-    const { x, y } = state.pointer;
-    mouse.current.x += (x * 0.18 - mouse.current.x) * 0.05;
-    mouse.current.y += (y * 0.12 - mouse.current.y) * 0.05;
-    g.position.x = mouse.current.x;
-    g.position.y = mouse.current.y;
   });
 
   return (
