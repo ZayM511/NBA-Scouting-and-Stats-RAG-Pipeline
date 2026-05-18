@@ -100,17 +100,59 @@ export interface AskRequest {
 // NEXT_PUBLIC_API_URL for a different host (e.g. deploy).
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+/** Friendly /ask wrapper. Translates upstream-credential failures into a
+ *  one-sentence error the TurnCard can show without exposing raw provider
+ *  JSON to the user. */
 export async function postAsk(body: AskRequest): Promise<AskResponse> {
   const res = await fetch(`${API_URL}/ask`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!res.ok) {
-    const detail = await res.text();
-    throw new Error(`POST /ask failed (${res.status}): ${detail.slice(0, 500)}`);
+  if (res.ok) return (await res.json()) as AskResponse;
+
+  // Try to parse the body as JSON first; fall back to text. FastAPI's
+  // HTTPException(detail={...}) returns {"detail": {...}}; HTTPException
+  // with a string detail returns {"detail": "..."}.
+  let bodyText = "";
+  let parsed: unknown = null;
+  try {
+    bodyText = await res.text();
+    parsed = JSON.parse(bodyText);
+  } catch {
+    // bodyText keeps the raw payload if it wasn't JSON.
   }
-  return (await res.json()) as AskResponse;
+  const detail = (parsed as { detail?: unknown } | null)?.detail;
+
+  // 1. Backend already translated to llm_unauthenticated — use its message.
+  if (
+    detail &&
+    typeof detail === "object" &&
+    (detail as { code?: string }).code === "llm_unauthenticated"
+  ) {
+    throw new Error(
+      (detail as { message?: string }).message ??
+        "The Oracle's API key needs attention.",
+    );
+  }
+
+  // 2. Raw Anthropic / Voyage / Cohere auth payload leaked through.
+  const haystack =
+    typeof detail === "string"
+      ? detail
+      : detail !== undefined
+        ? JSON.stringify(detail)
+        : bodyText;
+  if (/invalid x-api-key|authentication_error|"errorCode"\s*:\s*401/i.test(haystack)) {
+    throw new Error(
+      "The Oracle's LLM provider rejected its API key. Update ANTHROPIC_API_KEY in .env and restart the backend.",
+    );
+  }
+
+  // 3. Everything else — surface a trimmed raw detail so debugging is still
+  //    possible without a 4-screen wall of JSON.
+  const trimmed = haystack.slice(0, 280);
+  throw new Error(`POST /ask failed (${res.status}): ${trimmed}`);
 }
 
 export async function getHealth(): Promise<{ status: string; db_ok: boolean; note: string }> {

@@ -73,12 +73,7 @@ export function TurnCard({ turn, index, isSelected, onSelect }: Props) {
         </div>
       )}
 
-      {turn.status === "error" && (
-        <div className="m-4 mt-3 flex items-start gap-2 rounded-xl border border-[rgba(251,113,133,0.30)] bg-[rgba(251,113,133,0.08)] px-3 py-2 text-xs text-[#fda4af]">
-          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <span className="font-mono">{turn.error}</span>
-        </div>
-      )}
+      {turn.status === "error" && <TurnError error={turn.error ?? ""} />}
 
       {turn.status === "ok" && turn.response && (
         <div className="px-5 pb-4 pt-3 space-y-3">
@@ -118,6 +113,49 @@ export function TurnCard({ turn, index, isSelected, onSelect }: Props) {
     </motion.button>
   );
 }
+
+/**
+ * TurnError — error pill with a friendlier presentation. Detects credential
+ * failures from the wording the api.ts wrapper produces and shows a short
+ * "Edit .env" hint. Falls back to a plain monospace dump for anything that
+ * looks like a stack trace or a raw payload.
+ */
+function TurnError({ error }: { error: string }) {
+  const isCredentialError =
+    /api key|x-api-key|ANTHROPIC_API_KEY|llm provider rejected/i.test(error);
+  const looksTechnical = /\{|\[|stack|traceback|\bat \s/i.test(error);
+  return (
+    <div
+      data-testid="turn-error"
+      className="m-4 mt-3 flex items-start gap-2 rounded-xl border border-[rgba(251,113,133,0.30)] bg-[rgba(251,113,133,0.08)] px-3 py-2.5 text-[12.5px] leading-5 text-[#fda4af]"
+    >
+      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+      <div className="flex-1 space-y-1.5">
+        <p className={looksTechnical && !isCredentialError ? "font-mono text-[11px]" : ""}>
+          {error}
+        </p>
+        {isCredentialError && (
+          <p className="text-[11px] text-[#fda4af]/80">
+            Fix: open <span className="font-mono text-[#ffd0c0]">.env</span> in the
+            project root, replace{" "}
+            <span className="font-mono text-[#ffd0c0]">ANTHROPIC_API_KEY</span>{" "}
+            with a current key from{" "}
+            <a
+              href="https://console.anthropic.com/settings/keys"
+              target="_blank"
+              rel="noreferrer"
+              className="underline decoration-dotted underline-offset-2 hover:text-[#ffd0c0]"
+            >
+              console.anthropic.com/settings/keys
+            </a>
+            , then restart the FastAPI server.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 
 function PendingTrace() {
   const labels = ["Routing", "Retrieving", "Reading", "Synthesizing"];

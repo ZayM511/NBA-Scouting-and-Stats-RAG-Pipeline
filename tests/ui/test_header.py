@@ -296,9 +296,19 @@ def test_live_banner_shows_scores(goto_home):
     page.wait_for_selector('[data-testid="top-live"]', timeout=10_000)
     text = page.locator('[data-testid="top-live"]').text_content() or ""
     assert "LIVE" in text.upper()
-    # Two score numbers should be present.
-    nums = re.findall(r"\b\d{1,3}\b", text)
-    assert len(nums) >= 2, f"Couldn't find two scores in live banner text: {text!r}"
+    # Two score numbers should be present. textContent has no whitespace
+    # between flex children, so the clock and scores collapse into
+    # something like "0:000CLEVSDET0" — `\b\d+\b` finds only the clock
+    # digit. Walk the DOM directly for the score elements instead.
+    score_text = page.locator(
+        '[data-testid="top-live"] span.font-mono.tabular-nums'
+    ).all_text_contents()
+    assert len(score_text) >= 2, (
+        f"expected two score spans in live banner, got {score_text!r}; raw: {text!r}"
+    )
+    assert all(s.strip().isdigit() for s in score_text[:2]), (
+        f"score spans don't look like ints: {score_text[:2]!r}"
+    )
 
 
 # --------------------------------------------------------------------------

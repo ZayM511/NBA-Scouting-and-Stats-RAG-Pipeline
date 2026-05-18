@@ -356,6 +356,30 @@ def ask_endpoint(req: AskRequest) -> AskResponse:
         )
     except Exception as exc:
         logger.exception("ask endpoint failed")
+        # Translate upstream credential failures (Anthropic, Voyage, Cohere)
+        # into a clean 503 the UI can present without exposing the raw
+        # provider payload. Matches by exception class name + message so
+        # adding a new provider doesn't break this branch.
+        cls = type(exc).__name__
+        msg = str(exc)
+        is_auth_failure = (
+            cls in {"AuthenticationError", "PermissionDeniedError"}
+            or "x-api-key" in msg.lower()
+            or "authentication_error" in msg.lower()
+            or "401" in msg.split(":")[0]
+        )
+        if is_auth_failure:
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "code": "llm_unauthenticated",
+                    "message": (
+                        "The Oracle's LLM provider rejected its API key. "
+                        "Update ANTHROPIC_API_KEY (or the relevant provider key) "
+                        "in .env and restart the FastAPI server."
+                    ),
+                },
+            ) from exc
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     elapsed_ms = (time.perf_counter() - start) * 1000
 
