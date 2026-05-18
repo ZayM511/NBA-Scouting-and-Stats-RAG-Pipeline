@@ -172,9 +172,11 @@ export default function Home() {
         {/* Trace sidebar is always a solid foreground panel so the galaxy
             background never bleeds through the trace section. The orb on
             the home page is centered in the chat column to the left of
-            this sidebar, so this opaque sidebar doesn't clip the orb. */}
+            this sidebar, so this opaque sidebar doesn't clip the orb.
+            On the home screen (no question asked yet) the sidebar also
+            hosts the "How I Built This" entry button at its top edge. */}
         <aside className="relative hidden flex-col overflow-hidden bg-bg-elev lg:flex">
-          <Sidebar turn={selectedTurn} />
+          <Sidebar turn={selectedTurn} showBuildLink={isEmpty} />
         </aside>
       </div>
     </div>

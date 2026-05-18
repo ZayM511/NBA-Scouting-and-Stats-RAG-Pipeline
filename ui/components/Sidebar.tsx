@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Compass, Database, GitBranch, Layers, Quote, Search } from "lucide-react";
 import type { AskResponse } from "@/lib/api";
 import type { Turn } from "./TurnCard";
+import { BuildEntryButton } from "./BuildEntryButton";
 import { CopyButton } from "./CopyButton";
 import { RouteBadge } from "./RouteBadge";
 import { RetrievalPanel } from "./RetrievalPanel";
@@ -12,10 +13,15 @@ import { HybridPanel } from "./HybridPanel";
 
 interface Props {
   turn?: Turn;
+  /** When true (home screen, no question asked yet) the sidebar renders a
+   *  "How I Built This" entry button above the EmptyTrace card. The button
+   *  hides as soon as a turn lands so it doesn't compete with the trace
+   *  surface for attention. */
+  showBuildLink?: boolean;
 }
 
-export function Sidebar({ turn }: Props) {
-  if (!turn) return <EmptyTrace />;
+export function Sidebar({ turn, showBuildLink }: Props) {
+  if (!turn) return <EmptyTrace showBuildLink={showBuildLink} />;
   if (turn.status === "pending") return <PendingTrace />;
   if (turn.status === "error" || !turn.response) return <EmptyTrace error />;
 
@@ -210,27 +216,40 @@ function Section({
   );
 }
 
-function EmptyTrace({ error = false }: { error?: boolean }) {
+function EmptyTrace({
+  error = false,
+  showBuildLink = false,
+}: {
+  error?: boolean;
+  showBuildLink?: boolean;
+}) {
   // The sidebar wrapper is transparent on the home screen so the orb glow
   // extends across the viewport, but the empty-trace messaging itself needs
   // to read as a foreground card rather than blending into the background.
   // Wrap the copy in a solid, bordered panel so it pops in front of the orb.
+  //
+  // The BuildEntryButton sits ABOVE this card, anchored to the top of the
+  // aside, only on the home screen. Once a question lands the sidebar
+  // re-renders via the Trace branch and the button is no longer rendered.
   return (
-    <div className="flex h-full items-center justify-center px-5">
-      <div className="flex w-full max-w-[300px] flex-col items-center gap-3 rounded-2xl border hairline-strong bg-bg-elev px-6 py-7 text-center shadow-[0_18px_60px_-20px_rgba(0,0,0,0.85)]">
-        <div className="relative h-12 w-12">
-          <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle,_rgba(255,106,31,0.30)_0%,_transparent_70%)] blur-xl" />
-          <div className="relative grid h-full w-full place-items-center rounded-full border hairline bg-surface-2/80">
-            <Compass className="h-5 w-5 text-text-muted" />
+    <div className="flex h-full flex-col">
+      {showBuildLink && <BuildEntryButton />}
+      <div className="flex flex-1 items-center justify-center px-5">
+        <div className="flex w-full max-w-[300px] flex-col items-center gap-3 rounded-2xl border hairline-strong bg-bg-elev px-6 py-7 text-center shadow-[0_18px_60px_-20px_rgba(0,0,0,0.85)]">
+          <div className="relative h-12 w-12">
+            <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle,_rgba(255,106,31,0.30)_0%,_transparent_70%)] blur-xl" />
+            <div className="relative grid h-full w-full place-items-center rounded-full border hairline bg-surface-2/80">
+              <Compass className="h-5 w-5 text-text-muted" />
+            </div>
           </div>
+          <p className="text-[12.5px] font-medium text-text-muted">
+            {error ? "No trace available." : "The trace will appear here."}
+          </p>
+          <p className="text-[11.5px] leading-5 text-text-dim">
+            Router decisions, retrieved chunks, SQL, and citations land in this
+            panel after each question.
+          </p>
         </div>
-        <p className="text-[12.5px] font-medium text-text-muted">
-          {error ? "No trace available." : "The trace will appear here."}
-        </p>
-        <p className="text-[11.5px] leading-5 text-text-dim">
-          Router decisions, retrieved chunks, SQL, and citations land in this
-          panel after each question.
-        </p>
       </div>
     </div>
   );

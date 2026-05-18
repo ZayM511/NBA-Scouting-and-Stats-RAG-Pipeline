@@ -14,6 +14,9 @@ __pycache__/
 *.so
 .Python
 build/
+# The Next.js app has a real route at `ui/app/build/` (the "How I Built
+# This" page). Carve it out of the Python build/ exclusion above.
+!ui/app/build/
 develop-eggs/
 dist/
 downloads/
