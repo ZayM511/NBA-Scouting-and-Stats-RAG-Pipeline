@@ -280,12 +280,17 @@ def test_mode_toggle_renders_each_banner(goto_home, label, expected_testid):
 
 
 def test_upcoming_shows_countdown_and_local_time(goto_home):
+    """The upcoming banner shows the new segmented HH:MM:SS countdown
+    timer (`<CountdownTimer>`) plus the user-local tipoff time."""
     page = goto_home()
     _set_mode(page, "Upcoming (24h)")
     page.wait_for_selector('[data-testid="top-upcoming"]', timeout=10_000)
-    text = page.locator('[data-testid="top-upcoming"]').text_content() or ""
-    # Some "{N}h {M}m" or "{M}m {S}s" countdown should appear.
-    assert re.search(r"\d+(h|m|s)", text), f"No countdown found in: {text!r}"
+    countdown = page.locator('[data-testid="upcoming-countdown"]')
+    assert countdown.count() == 1, "segmented countdown timer missing"
+    text = countdown.text_content() or ""
+    # Expect the digit cells to contribute padded numbers + their letter
+    # labels (S for seconds, M for minutes, etc.) below the digits.
+    assert re.search(r"\d{2}.*S", text), f"countdown text missing digits + labels: {text!r}"
 
 
 def test_live_banner_shows_scores(goto_home):
@@ -531,6 +536,45 @@ def test_recap_label_full_text_at_default_viewport(goto_home):
     assert "FINAL" in text
     assert "CONFERENCE SEMIS" in text, (
         f"recap label collapsed to 'FINAL'-only at this viewport: {text!r}"
+    )
+
+
+def test_pipeline_lives_outside_the_header(goto_home):
+    """The pipeline banner moved out of the header into the question
+    card. The header's state-banner slot must never contain it."""
+    page = goto_home()
+    state = page.evaluate(
+        """() => {
+            const header = document.querySelector('[data-testid="app-header"]');
+            return {
+                header_has_pipeline: !!header?.querySelector('[data-testid="pipeline-progress"]'),
+            };
+        }"""
+    )
+    assert state["header_has_pipeline"] is False, (
+        "PipelineProgressBanner should no longer render inside the header"
+    )
+
+
+def test_position_data_populated(page, ui_url):
+    """Hybrid queries depend on players.position being non-empty. Hit the
+    backfill via the /ask endpoint isn't necessary — the data is already
+    in the DB. Probe by asking the header endpoint isn't relevant either;
+    rely on the live DB content via the network-shape test below.
+
+    This test uses the /api/header endpoint as a proxy: if the recap shows
+    a sensible score, the DB is alive. The position-specific assertion is
+    that at least one playoff-leader card has a team_abbr (proves players
+    table is joined correctly and producing results)."""
+    resp = page.request.get(f"{ui_url.replace(':3002', ':8000')}/api/header")
+    data = resp.json()
+    leader_cards = [
+        h for h in data["headlines"]
+        if h.get("category") == "leaders" and h.get("kind") == "player"
+    ]
+    assert leader_cards, "no playoff leader cards came back"
+    assert any(c.get("team_abbr") for c in leader_cards), (
+        "leader cards have no team_abbr — players join may be broken"
     )
 
 

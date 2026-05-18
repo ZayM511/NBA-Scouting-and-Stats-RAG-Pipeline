@@ -1,12 +1,14 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { AlertCircle, ChevronRight, MessageCircle } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { AskResponse } from "@/lib/api";
 import { RouteBadge } from "./RouteBadge";
 import { CostBadge } from "./CostBadge";
 import { AnswerPanel } from "./AnswerPanel";
+import { PipelineProgressBanner } from "./PipelineProgressBanner";
 
 export interface Turn {
   question: string;
@@ -31,6 +33,29 @@ function totalCost(r: AskResponse): number {
 }
 
 export function TurnCard({ turn, index, isSelected, onSelect }: Props) {
+  // Phase machine for the pending → success → answer transition. We hold a
+  // "success" phase for ~900 ms when the response lands so the user sees
+  // every pipeline stage check off before the answer panel takes the slot.
+  const [phase, setPhase] = useState<"idle" | "running" | "success">(
+    turn.status === "pending" ? "running" : "idle",
+  );
+  const prevStatus = useRef(turn.status);
+  useEffect(() => {
+    const was = prevStatus.current;
+    prevStatus.current = turn.status;
+    if (turn.status === "pending") {
+      setPhase("running");
+      return;
+    }
+    if (was === "pending" && turn.status === "ok") {
+      setPhase("success");
+      const t = setTimeout(() => setPhase("idle"), 900);
+      return () => clearTimeout(t);
+    }
+    // Error or any other status flips us back to idle so the error pill renders.
+    if (turn.status !== "ok") setPhase("idle");
+  }, [turn.status]);
+
   return (
     <motion.button
       type="button"
@@ -67,15 +92,40 @@ export function TurnCard({ turn, index, isSelected, onSelect }: Props) {
         <span className="font-mono text-[10px] text-text-dim">#{index + 1}</span>
       </div>
 
-      {turn.status === "pending" && (
-        <div className="px-5 py-4">
-          <PendingTrace />
-        </div>
-      )}
+      <AnimatePresence mode="wait" initial={false}>
+        {phase === "running" && (
+          <motion.div
+            key="banner-running"
+            initial={{ opacity: 0, y: -2 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.22, ease: "easeOut" }}
+            className="px-5 pt-3 pb-4"
+          >
+            <div className="h-14 w-full">
+              <PipelineProgressBanner pending phase="running" />
+            </div>
+          </motion.div>
+        )}
+        {phase === "success" && (
+          <motion.div
+            key="banner-success"
+            initial={{ opacity: 0, scale: 0.99 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.99 }}
+            transition={{ duration: 0.28, ease: "easeOut" }}
+            className="px-5 pt-3 pb-4"
+          >
+            <div className="h-14 w-full">
+              <PipelineProgressBanner pending={false} phase="success" />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {turn.status === "error" && <TurnError error={turn.error ?? ""} />}
 
-      {turn.status === "ok" && turn.response && (
+      {turn.status === "ok" && phase === "idle" && turn.response && (
         <div className="px-5 pb-4 pt-3 space-y-3">
           <div className="flex flex-wrap items-center gap-2">
             <RouteBadge
@@ -157,32 +207,3 @@ function TurnError({ error }: { error: string }) {
 }
 
 
-function PendingTrace() {
-  const labels = ["Routing", "Retrieving", "Reading", "Synthesizing"];
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-text-muted">
-        <span
-          className="inline-block h-2 w-2 animate-pulse rounded-full"
-          style={{ background: "#ff6a1f", boxShadow: "0 0 10px #ff6a1f" }}
-        />
-        Thinking
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {labels.map((l) => (
-          <span
-            key={l}
-            className="shimmer rounded-md border hairline px-2 py-1 text-[11px] text-text-muted"
-          >
-            {l}…
-          </span>
-        ))}
-      </div>
-      <div className="space-y-1.5 pt-1">
-        <div className="shimmer h-3 w-11/12 rounded-md" />
-        <div className="shimmer h-3 w-9/12 rounded-md" />
-        <div className="shimmer h-3 w-10/12 rounded-md" />
-      </div>
-    </div>
-  );
-}

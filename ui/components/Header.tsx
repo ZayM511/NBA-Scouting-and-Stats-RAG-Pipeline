@@ -8,8 +8,12 @@ import { NBASeasonBadge } from "./NBASeasonBadge";
 import { HeaderTicker } from "./HeaderTicker";
 import { TopRowLive, TopRowRecap, TopRowUpcoming } from "./TopRowBanners";
 import { HeaderStateToggle } from "./HeaderStateToggle";
-import { PipelineProgressBanner } from "./PipelineProgressBanner";
-import { getHeader, type HeaderMode, type HeaderPayload } from "@/lib/api";
+import {
+  getHeader,
+  type HeaderMode,
+  type HeaderPayload,
+  type TickerScope,
+} from "@/lib/api";
 import { cn } from "@/lib/cn";
 
 interface Props {
@@ -18,19 +22,18 @@ interface Props {
   canGoHome: boolean;
   /** Called when the user wants to clear the conversation and return home. */
   onHome: () => void;
-  /** When true, a question is in flight — the banner shows pipeline progress. */
-  pending?: boolean;
 }
 
-export function Header({ healthOk, canGoHome, onHome, pending = false }: Props) {
+export function Header({ healthOk, canGoHome, onHome }: Props) {
   const [payload, setPayload] = useState<HeaderPayload | null>(null);
   const [mode, setMode] = useState<HeaderMode | "auto">("auto");
+  const [scope, setScope] = useState<TickerScope>("playoffs");
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setErr(null);
-    getHeader(mode)
+    getHeader(mode, scope)
       .then((p) => {
         if (!cancelled) setPayload(p);
       })
@@ -43,15 +46,30 @@ export function Header({ healthOk, canGoHome, onHome, pending = false }: Props) 
     return () => {
       cancelled = true;
     };
-  }, [mode]);
+  }, [mode, scope]);
 
-  // Auto-refresh every 60s so live/recap data stays fresh.
+  // Keep live/recap/upcoming/ticker data current:
+  //   • re-fetch every 60s while the tab is open
+  //   • re-fetch immediately whenever the tab regains focus (covers the
+  //     "I just navigated back" and "I unfocused for a meeting" cases)
+  //   • re-fetch when the page becomes visible again after being hidden
   useEffect(() => {
-    const t = setInterval(() => {
-      getHeader(mode).then(setPayload).catch(() => {});
-    }, 60_000);
-    return () => clearInterval(t);
-  }, [mode]);
+    const refetch = () => {
+      getHeader(mode, scope).then(setPayload).catch(() => {});
+    };
+    const interval = setInterval(refetch, 60_000);
+    const onFocus = () => refetch();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refetch();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [mode, scope]);
 
   return (
     <>
@@ -99,11 +117,7 @@ export function Header({ healthOk, canGoHome, onHome, pending = false }: Props) 
           {/* State banner — h-16 matches the NBA badge height (py-2 + h-12). */}
           <div className="hidden min-w-0 items-center justify-end md:flex">
             <div className="h-16 w-[640px] max-w-[640px]">
-              <HeaderStateBanner
-                payload={payload}
-                err={err}
-                pending={pending}
-              />
+              <HeaderStateBanner payload={payload} err={err} />
             </div>
           </div>
 
@@ -162,7 +176,12 @@ export function Header({ healthOk, canGoHome, onHome, pending = false }: Props) 
           </div>
         </div>
       </header>
-      <HeaderStateToggle current={mode} onChange={setMode} />
+      <HeaderStateToggle
+        current={mode}
+        onChange={setMode}
+        scope={scope}
+        onScopeChange={setScope}
+      />
     </>
   );
 }
@@ -170,17 +189,10 @@ export function Header({ healthOk, canGoHome, onHome, pending = false }: Props) 
 function HeaderStateBanner({
   payload,
   err,
-  pending,
 }: {
   payload: HeaderPayload | null;
   err: string | null;
-  pending: boolean;
 }) {
-  // Pipeline overrides everything else: while a question is mid-flight,
-  // the banner is the user's live status feedback.
-  if (pending) {
-    return <PipelineProgressBanner pending={pending} />;
-  }
   if (err) {
     return (
       <div className="flex h-full items-center text-[11px] text-text-dim">

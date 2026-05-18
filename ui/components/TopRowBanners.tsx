@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { Clock, Crown, Flame, Radio } from "lucide-react";
 import { TeamShield } from "./TeamShield";
 import type { LiveGame, RecentGame, UpcomingGame } from "@/lib/api";
@@ -138,25 +138,130 @@ function formatTipoff(iso: string, tz: string): string {
   }).format(d);
 }
 
-function formatCountdown(iso: string): string {
+interface CountdownParts {
+  d: number;
+  h: number;
+  m: number;
+  s: number;
+  totalMs: number;
+}
+
+function countdownParts(iso: string): CountdownParts {
   const target = new Date(iso).getTime();
-  const now = Date.now();
-  let diff = Math.max(0, target - now);
+  const totalMs = Math.max(0, target - Date.now());
+  let diff = totalMs;
+  const d = Math.floor(diff / 86_400_000); diff -= d * 86_400_000;
   const h = Math.floor(diff / 3_600_000); diff -= h * 3_600_000;
   const m = Math.floor(diff / 60_000); diff -= m * 60_000;
   const s = Math.floor(diff / 1000);
-  if (h > 0) return `${h}h ${m}m`;
-  if (m > 0) return `${m}m ${s}s`;
-  return `${s}s`;
+  return { d, h, m, s, totalMs };
+}
+
+
+/**
+ * CountdownTimer — segmented HH:MM:SS pill cells. Each cell ticks via a
+ * framer-motion popLayout swap when the digit changes, so the seconds
+ * column counts down smoothly. Days show only when tipoff is more than
+ * 24 hours away. Tone tightens to ember within the final hour.
+ */
+function CountdownTimer({ iso }: { iso: string }) {
+  const [parts, setParts] = useState<CountdownParts>(() => countdownParts(iso));
+  useEffect(() => {
+    setParts(countdownParts(iso));
+    const t = setInterval(() => setParts(countdownParts(iso)), 1000);
+    return () => clearInterval(t);
+  }, [iso]);
+
+  const isImminent = parts.totalMs <= 60 * 60_000 && parts.totalMs > 0;
+  const showDays = parts.d > 0;
+
+  return (
+    <div
+      data-testid="upcoming-countdown"
+      className="inline-flex items-center gap-1 rounded-lg border bg-bg-elev/60 px-1.5 py-1 backdrop-blur-md"
+      style={{
+        borderColor: isImminent
+          ? "rgba(251,113,133,0.55)"
+          : "rgba(255,106,31,0.45)",
+        boxShadow: isImminent
+          ? "0 0 0 1px rgba(251,113,133,0.30), 0 8px 24px -10px rgba(251,113,133,0.45)"
+          : "0 0 0 1px rgba(255,106,31,0.18), 0 8px 24px -10px rgba(255,106,31,0.30)",
+      }}
+    >
+      {showDays && (
+        <>
+          <DigitCell value={parts.d} label="D" tone={isImminent ? "rose" : "ember"} />
+          <Sep />
+        </>
+      )}
+      <DigitCell
+        value={parts.h}
+        label={showDays ? "H" : "HR"}
+        tone={isImminent ? "rose" : "ember"}
+      />
+      <Sep />
+      <DigitCell value={parts.m} label="M" tone={isImminent ? "rose" : "ember"} />
+      <Sep />
+      <DigitCell value={parts.s} label="S" tone={isImminent ? "rose" : "ember"} />
+    </div>
+  );
+}
+
+function DigitCell({
+  value,
+  label,
+  tone,
+}: {
+  value: number;
+  label: string;
+  tone: "ember" | "rose";
+}) {
+  const padded = value.toString().padStart(2, "0");
+  const color = tone === "rose" ? "#fda4af" : "#ffb380";
+  const bg = tone === "rose" ? "rgba(251,113,133,0.10)" : "rgba(255,106,31,0.10)";
+  return (
+    <span className="relative inline-flex flex-col items-center px-1">
+      <span
+        className="block min-w-[1.7ch] rounded-md px-1 text-center font-mono text-[15px] font-semibold tabular-nums leading-none"
+        style={{ color, background: bg }}
+      >
+        <AnimatePresence mode="popLayout" initial={false}>
+          <motion.span
+            key={padded}
+            initial={{ y: -8, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 8, opacity: 0 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+            className="block py-0.5"
+          >
+            {padded}
+          </motion.span>
+        </AnimatePresence>
+      </span>
+      <span
+        className="mt-0.5 text-[8.5px] uppercase tracking-[0.18em]"
+        style={{ color: "rgba(161,161,170,0.85)" }}
+      >
+        {label}
+      </span>
+    </span>
+  );
+}
+
+function Sep() {
+  return (
+    <span
+      className="font-mono text-[15px] font-semibold leading-none"
+      style={{ color: "rgba(161,161,170,0.55)" }}
+      aria-hidden="true"
+    >
+      :
+    </span>
+  );
 }
 
 export function TopRowUpcoming({ game }: { game: UpcomingGame }) {
   const userTz = useMemo(userTimeZone, []);
-  const [countdown, setCountdown] = useState(() => formatCountdown(game.tipoff_utc));
-  useEffect(() => {
-    const t = setInterval(() => setCountdown(formatCountdown(game.tipoff_utc)), 1000);
-    return () => clearInterval(t);
-  }, [game.tipoff_utc]);
   const userTime = formatTipoff(game.tipoff_utc, userTz);
 
   return (
@@ -184,15 +289,7 @@ export function TopRowUpcoming({ game }: { game: UpcomingGame }) {
         <span className="text-[18px] font-semibold text-text">{game.home.abbr}</span>
         <TeamShield team={game.home} side="left" size="md" rotate={0} />
       </div>
-      <motion.span
-        key={countdown}
-        initial={{ opacity: 0.5, scale: 0.94 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.18 }}
-        className="rounded-md border border-[rgba(255,106,31,0.50)] bg-[rgba(255,106,31,0.12)] px-2 py-0.5 font-mono text-[14px] font-semibold text-[#ffb380]"
-      >
-        {countdown}
-      </motion.span>
+      <CountdownTimer iso={game.tipoff_utc} />
       <span className="hidden lg:inline-flex items-center gap-1 text-[12px] text-text-muted">
         <Clock className="h-3.5 w-3.5" />
         {userTime}

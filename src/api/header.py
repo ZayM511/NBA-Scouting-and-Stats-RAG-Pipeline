@@ -444,13 +444,16 @@ FUN_FACTS_2025_26: list[Headline] = [
 ]
 
 
-def _compute_headlines() -> list[Headline]:
+Scope = Literal["playoffs", "regular"]
+
+
+def _compute_headlines(scope: Scope = "playoffs") -> list[Headline]:
     """Build the categorized headline list rendered by the ticker.
 
-    Returns one continuous list interleaved with section dividers in the
-    order: AWARDS → LEADERS → STATS → UPCOMING → FUN FACTS. The frontend
-    renders dividers in a wider style so users see the sections scroll
-    past as the marquee loops.
+    `scope="playoffs"` (default) sources the leader/stats sections from
+    playoff games; `scope="regular"` swaps to regular-season stats so the
+    ticker reflects the 82-game body of work. Awards, upcoming games,
+    and fun facts are the same in either scope (they're scope-neutral).
     """
 
     out: list[Headline] = []
@@ -459,163 +462,93 @@ def _compute_headlines() -> list[Headline]:
     out.append(_divider("SEASON AWARDS · 2025-26", "amber"))
     out.extend(SEASON_AWARDS_2025_26)
 
-    # ---- 2. PLAYOFF LEADERS section -------------------------------------
-    out.append(_divider("PLAYOFF LEADERS", "ember"))
-    out.extend(_compute_leader_cards())
+    # ---- 2. LEADERS section ---------------------------------------------
+    if scope == "regular":
+        out.append(_divider("REGULAR-SEASON LEADERS", "ember"))
+    else:
+        out.append(_divider("PLAYOFF LEADERS", "ember"))
+    out.extend(_compute_leader_cards(scope))
 
-    # ---- 3. PLAYOFF STATS section ---------------------------------------
-    out.append(_divider("PLAYOFF STATS", "rose"))
-    out.extend(_compute_stats_cards())
+    # ---- 3. STATS section -----------------------------------------------
+    if scope == "regular":
+        out.append(_divider("REGULAR-SEASON STATS", "rose"))
+    else:
+        out.append(_divider("PLAYOFF STATS", "rose"))
+    out.extend(_compute_stats_cards(scope))
 
-    # ---- 4. UPCOMING GAMES section --------------------------------------
+    # ---- 4. UPCOMING GAMES section (scope-neutral) ----------------------
     out.append(_divider("UPCOMING GAMES", "ice"))
     out.extend(_compute_next_games(date.today()))
 
-    # ---- 5. FUN FACTS section -------------------------------------------
+    # ---- 5. FUN FACTS section (scope-neutral) ---------------------------
     out.append(_divider("FUN FACTS · 2025-26", "violet"))
     out.extend(FUN_FACTS_2025_26)
 
     return out
 
 
-# Stat-leader SQL queries, one per leader card. Each tuple is
-# (label, sql, metric format template).
-_LEADER_QUERIES: list[tuple[str, str, str]] = [
-    (
-        "PLAYOFF PPG LEADER",
-        """
-        SELECT p.name, p.team, COUNT(*) AS gp, AVG(pgs.pts) AS metric
-        FROM player_game_stats pgs
-        JOIN players p ON p.player_id = pgs.player_id
-        JOIN games g ON g.game_id = pgs.game_id
-        WHERE NOT pgs.is_clutch_data AND g.is_playoff AND g.season = '2025-26'
-          AND pgs.minutes > 0
-        GROUP BY p.name, p.team
-        HAVING COUNT(*) >= 4
-        ORDER BY AVG(pgs.pts) DESC
-        LIMIT 1
-        """,
-        "{metric:.1f} PPG",
-    ),
-    (
-        "PLAYOFF RPG LEADER",
-        """
-        SELECT p.name, p.team, COUNT(*) AS gp, AVG(pgs.reb) AS metric
-        FROM player_game_stats pgs
-        JOIN players p ON p.player_id = pgs.player_id
-        JOIN games g ON g.game_id = pgs.game_id
-        WHERE NOT pgs.is_clutch_data AND g.is_playoff AND g.season = '2025-26'
-          AND pgs.minutes > 0
-        GROUP BY p.name, p.team
-        HAVING COUNT(*) >= 4
-        ORDER BY AVG(pgs.reb) DESC
-        LIMIT 1
-        """,
-        "{metric:.1f} RPG",
-    ),
-    (
-        "PLAYOFF APG LEADER",
-        """
-        SELECT p.name, p.team, COUNT(*) AS gp, AVG(pgs.ast) AS metric
-        FROM player_game_stats pgs
-        JOIN players p ON p.player_id = pgs.player_id
-        JOIN games g ON g.game_id = pgs.game_id
-        WHERE NOT pgs.is_clutch_data AND g.is_playoff AND g.season = '2025-26'
-          AND pgs.minutes > 0
-        GROUP BY p.name, p.team
-        HAVING COUNT(*) >= 4
-        ORDER BY AVG(pgs.ast) DESC
-        LIMIT 1
-        """,
-        "{metric:.1f} APG",
-    ),
-    (
-        "PLAYOFF 3PM/GAME",
-        """
-        SELECT p.name, p.team, COUNT(*) AS gp, AVG(pgs.fg3m) AS metric
-        FROM player_game_stats pgs
-        JOIN players p ON p.player_id = pgs.player_id
-        JOIN games g ON g.game_id = pgs.game_id
-        WHERE NOT pgs.is_clutch_data AND g.is_playoff AND g.season = '2025-26'
-          AND pgs.minutes > 0
-        GROUP BY p.name, p.team
-        HAVING COUNT(*) >= 4
-        ORDER BY AVG(pgs.fg3m) DESC
-        LIMIT 1
-        """,
-        "{metric:.1f} 3PM",
-    ),
-    (
-        "PLAYOFF BLOCKS",
-        """
-        SELECT p.name, p.team, COUNT(*) AS gp, AVG(pgs.blk) AS metric
-        FROM player_game_stats pgs
-        JOIN players p ON p.player_id = pgs.player_id
-        JOIN games g ON g.game_id = pgs.game_id
-        WHERE NOT pgs.is_clutch_data AND g.is_playoff AND g.season = '2025-26'
-          AND pgs.minutes > 0
-        GROUP BY p.name, p.team
-        HAVING COUNT(*) >= 4
-        ORDER BY AVG(pgs.blk) DESC
-        LIMIT 1
-        """,
-        "{metric:.2f} BPG",
-    ),
-    (
-        "PLAYOFF STEALS",
-        """
-        SELECT p.name, p.team, COUNT(*) AS gp, AVG(pgs.stl) AS metric
-        FROM player_game_stats pgs
-        JOIN players p ON p.player_id = pgs.player_id
-        JOIN games g ON g.game_id = pgs.game_id
-        WHERE NOT pgs.is_clutch_data AND g.is_playoff AND g.season = '2025-26'
-          AND pgs.minutes > 0
-        GROUP BY p.name, p.team
-        HAVING COUNT(*) >= 4
-        ORDER BY AVG(pgs.stl) DESC
-        LIMIT 1
-        """,
-        "{metric:.2f} SPG",
-    ),
-    (
-        "CLUTCH TS% LEADER",
-        """
-        SELECT p.name, p.team, pcs.gp, pcs.ts_pct AS metric
-        FROM player_clutch_stats pcs
-        JOIN players p ON p.player_id = pcs.player_id
-        WHERE pcs.season = '2025-26' AND pcs.season_type = 'Playoffs'
-          AND pcs.gp >= 3 AND pcs.ts_pct IS NOT NULL
-        ORDER BY pcs.ts_pct DESC
-        LIMIT 1
-        """,
-        "{metric_pct} TS%",
-    ),
-    (
-        "PLAYOFF +/- LEADER",
-        """
-        SELECT p.name, p.team, COUNT(*) AS gp, SUM(pgs.plus_minus)::float AS metric
-        FROM player_game_stats pgs
-        JOIN players p ON p.player_id = pgs.player_id
-        JOIN games g ON g.game_id = pgs.game_id
-        WHERE NOT pgs.is_clutch_data AND g.is_playoff AND g.season = '2025-26'
-          AND pgs.minutes > 0
-        GROUP BY p.name, p.team
-        HAVING COUNT(*) >= 4
-        ORDER BY SUM(pgs.plus_minus) DESC
-        LIMIT 1
-        """,
-        "{metric:+.0f} TOTAL",
-    ),
-]
+def _leader_queries(scope: Scope) -> list[tuple[str, str, str]]:
+    """Return (label, sql, metric_format) tuples for the leader cards in the
+    given scope. Playoffs uses a low HAVING-game-count threshold (4) since
+    series are short; regular season uses 20 so the top doesn't flip on a
+    one-game sample."""
+    is_playoff = scope == "playoffs"
+    predicate = "g.is_playoff" if is_playoff else "NOT g.is_playoff"
+    min_games = 4 if is_playoff else 20
+    label_prefix = "PLAYOFF" if is_playoff else "REG-SEASON"
+    clutch_split = "Playoffs" if is_playoff else "Regular Season"
+
+    def stat_query(label: str, expr: str, fmt: str, order: str = "DESC") -> tuple[str, str, str]:
+        return (
+            f"{label_prefix} {label}",
+            f"""
+            SELECT p.name, p.team, COUNT(*) AS gp, {expr} AS metric
+            FROM player_game_stats pgs
+            JOIN players p ON p.player_id = pgs.player_id
+            JOIN games g ON g.game_id = pgs.game_id
+            WHERE NOT pgs.is_clutch_data AND {predicate} AND g.season = '2025-26'
+              AND pgs.minutes > 0
+            GROUP BY p.name, p.team
+            HAVING COUNT(*) >= {min_games}
+            ORDER BY {expr} {order}
+            LIMIT 1
+            """,
+            fmt,
+        )
+
+    return [
+        stat_query("PPG LEADER",    "AVG(pgs.pts)",  "{metric:.1f} PPG"),
+        stat_query("RPG LEADER",    "AVG(pgs.reb)",  "{metric:.1f} RPG"),
+        stat_query("APG LEADER",    "AVG(pgs.ast)",  "{metric:.1f} APG"),
+        stat_query("3PM/GAME",      "AVG(pgs.fg3m)", "{metric:.1f} 3PM"),
+        stat_query("BLOCKS",        "AVG(pgs.blk)",  "{metric:.2f} BPG"),
+        stat_query("STEALS",        "AVG(pgs.stl)",  "{metric:.2f} SPG"),
+        (
+            f"CLUTCH TS% LEADER · {clutch_split.upper()}",
+            f"""
+            SELECT p.name, p.team, pcs.gp, pcs.ts_pct AS metric
+            FROM player_clutch_stats pcs
+            JOIN players p ON p.player_id = pcs.player_id
+            WHERE pcs.season = '2025-26' AND pcs.season_type = '{clutch_split}'
+              AND pcs.gp >= {3 if is_playoff else 20} AND pcs.ts_pct IS NOT NULL
+            ORDER BY pcs.ts_pct DESC
+            LIMIT 1
+            """,
+            "{metric_pct} TS%",
+        ),
+        stat_query("+/- LEADER", "SUM(pgs.plus_minus)::float", "{metric:+.0f} TOTAL"),
+    ]
 
 
-def _compute_leader_cards() -> list[Headline]:
+
+
+def _compute_leader_cards(scope: Scope = "playoffs") -> list[Headline]:
     """Pull one Headline per stat-leader query. Each query is small,
     indexed, and runs sub-millisecond on the dev DB."""
     out: list[Headline] = []
     try:
         with _db() as conn, conn.cursor() as cur:
-            for i, (label, sql, metric_tpl) in enumerate(_LEADER_QUERIES):
+            for i, (label, sql, metric_tpl) in enumerate(_leader_queries(scope)):
                 try:
                     cur.execute(sql)
                     row = cur.fetchone()
@@ -646,10 +579,22 @@ def _compute_leader_cards() -> list[Headline]:
     return out
 
 
-def _compute_stats_cards() -> list[Headline]:
-    """Team-level playoff stat cards — top record (the headline-fix card)
-    plus a couple of derived narrative stats."""
+def _compute_stats_cards(scope: Scope = "playoffs") -> list[Headline]:
+    """Team-level stat cards in the requested scope — top record + the
+    most recent final game.
+
+    Playoffs scope: "PLAYOFFS · TOP RECORD" + "LATEST PLAYOFF FINAL".
+    Regular-season scope: "REGULAR-SEASON · TOP RECORD" + the most
+    recent regular-season final.
+    """
     out: list[Headline] = []
+    playoff_predicate = "is_playoff" if scope == "playoffs" else "NOT is_playoff"
+    label_prefix = "PLAYOFFS" if scope == "playoffs" else "REGULAR SEASON"
+    secondary_phrase = (
+        "best playoff record this run"
+        if scope == "playoffs"
+        else "best regular-season record"
+    )
     try:
         with _db() as conn, conn.cursor() as cur:
             # No outer GROUP BY here: when a team's home and away splits are
@@ -658,18 +603,18 @@ def _compute_stats_cards() -> list[Headline]:
             # accumulator below would only see half the wins. The union all
             # emits up to two rows per team and Python sums them.
             cur.execute(
-                """
+                f"""
                 SELECT home_team AS team,
                        SUM((home_score > away_score)::int) AS wins,
                        SUM((home_score < away_score)::int) AS losses
-                FROM games WHERE is_playoff AND season = '2025-26'
+                FROM games WHERE {playoff_predicate} AND season = '2025-26'
                   AND home_score IS NOT NULL
                 GROUP BY home_team
                 UNION ALL
                 SELECT away_team AS team,
                        SUM((away_score > home_score)::int) AS wins,
                        SUM((away_score < home_score)::int) AS losses
-                FROM games WHERE is_playoff AND season = '2025-26'
+                FROM games WHERE {playoff_predicate} AND season = '2025-26'
                   AND home_score IS NOT NULL
                 GROUP BY away_team
                 """
@@ -700,9 +645,9 @@ def _compute_stats_cards() -> list[Headline]:
                     Headline(
                         kind="team",
                         category="scores",
-                        label="PLAYOFFS · TOP RECORD",
+                        label=f"{label_prefix} · TOP RECORD",
                         primary=full_name,
-                        secondary="best playoff record this run",
+                        secondary=secondary_phrase,
                         metric=metric,
                         tone="amber",
                         team_abbr=team,
@@ -711,14 +656,14 @@ def _compute_stats_cards() -> list[Headline]:
     except Exception:  # noqa: BLE001
         logger.exception("top-record computation failed")
 
-    # Most recent completed playoff game — quick recap card.
+    # Most recent completed game in the requested scope.
     try:
         with _db() as conn, conn.cursor() as cur:
             cur.execute(
-                """
+                f"""
                 SELECT date, home_team, away_team, home_score, away_score
                 FROM games
-                WHERE is_playoff AND season = '2025-26'
+                WHERE {playoff_predicate} AND season = '2025-26'
                   AND home_score IS NOT NULL AND away_score IS NOT NULL
                 ORDER BY date DESC, game_id DESC
                 LIMIT 1
@@ -734,7 +679,7 @@ def _compute_stats_cards() -> list[Headline]:
                 out.append(
                     Headline(
                         kind="team", category="scores",
-                        label="LATEST PLAYOFF FINAL",
+                        label=("LATEST PLAYOFF FINAL" if scope == "playoffs" else "LATEST REGULAR-SEASON FINAL"),
                         primary=f"{winner} defeated {loser}",
                         secondary=f"{max(int(hs), int(as_))}-{min(int(hs), int(as_))} · {gdate_str}",
                         metric=f"+{margin}",
@@ -1127,15 +1072,17 @@ def _determine_mode(
 @router.get("", response_model=HeaderPayload)
 def get_header(
     mode: Literal["auto", "season", "upcoming", "live", "recap"] = Query("auto"),
+    scope: Literal["playoffs", "regular"] = Query("playoffs"),
 ) -> HeaderPayload:
     """Return the header payload. `mode=auto` lets the server decide.
 
-    Forcing a mode (e.g. `?mode=live`) returns whatever payload is needed
-    for that view, which is what the frontend dev toggle uses.
+    `scope` toggles the ticker's leader + stats sections between playoff
+    and regular-season data. Awards, upcoming games, and fun facts are
+    scope-neutral.
     """
     today_utc = datetime.now(timezone.utc)
 
-    headlines = _compute_headlines()
+    headlines = _compute_headlines(scope=scope)
     recent = _compute_recent()
     upcoming = _compute_upcoming(today_utc.date())
     live = _simulate_live() if mode == "live" else None

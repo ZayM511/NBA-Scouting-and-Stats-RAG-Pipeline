@@ -69,57 +69,78 @@ interface Props {
   pending: boolean;
   /** ms between stage advances while pending. */
   stepInterval?: number;
+  /** "running" (default) animates stages forward while pending.
+   *  "success" parks every stage at complete and renders a one-shot
+   *  green checkmark burst, used by the parent right before unmount. */
+  phase?: "running" | "success";
 }
 
 export function PipelineProgressBanner({
   pending,
   stepInterval = 700,
+  phase = "running",
 }: Props) {
   const [activeIdx, setActiveIdx] = useState(0);
 
   // Advance the active stage while we're pending. Stop on the last stage
   // and wait for the answer to arrive.
   useEffect(() => {
-    if (!pending) return;
+    if (!pending || phase === "success") return;
     setActiveIdx(0);
     const id = setInterval(() => {
       setActiveIdx((i) => Math.min(STAGES.length - 1, i + 1));
     }, stepInterval);
     return () => clearInterval(id);
-  }, [pending, stepInterval]);
+  }, [pending, stepInterval, phase]);
 
-  // When pending flips false, fast-forward to "all complete" by parking
-  // activeIdx past the last stage so every card renders its checkmark.
+  // When pending flips false (or we're explicitly in success phase),
+  // fast-forward to "all complete" by parking activeIdx past the last
+  // stage so every card renders its checkmark.
   useEffect(() => {
-    if (!pending) setActiveIdx(STAGES.length);
-  }, [pending]);
+    if (!pending || phase === "success") setActiveIdx(STAGES.length);
+  }, [pending, phase]);
+
+  const success = phase === "success";
 
   return (
     <motion.div
       data-testid="pipeline-progress"
+      data-phase={phase}
       initial={{ opacity: 0, y: -4 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -4 }}
       transition={{ duration: 0.25 }}
-      className="relative flex h-full items-center justify-end gap-1.5 rounded-xl border border-[rgba(255,106,31,0.30)] bg-surface/55 px-3 backdrop-blur-xl"
+      className="relative flex h-full w-full items-center justify-start gap-1.5 rounded-xl border bg-surface/55 px-3 backdrop-blur-xl"
       style={{
-        background:
-          "linear-gradient(90deg, rgba(125,211,252,0.10) 0%, rgba(255,106,31,0.10) 35%, rgba(167,139,250,0.10) 65%, rgba(251,191,36,0.12) 100%)",
+        borderColor: success
+          ? "rgba(110,231,183,0.45)"
+          : "rgba(255,106,31,0.30)",
+        background: success
+          ? "linear-gradient(90deg, rgba(110,231,183,0.18) 0%, rgba(251,191,36,0.16) 50%, rgba(110,231,183,0.18) 100%)"
+          : "linear-gradient(90deg, rgba(125,211,252,0.10) 0%, rgba(255,106,31,0.10) 35%, rgba(167,139,250,0.10) 65%, rgba(251,191,36,0.12) 100%)",
+        boxShadow: success
+          ? "0 0 0 1px rgba(110,231,183,0.30), 0 14px 32px -16px rgba(110,231,183,0.45)"
+          : undefined,
       }}
       role="status"
       aria-live="polite"
-      aria-label="RAG pipeline progress"
+      aria-label={success ? "RAG pipeline complete" : "RAG pipeline progress"}
     >
       <span
-        className="mr-1 inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.20em] text-[#ffb380]"
+        className="mr-1 inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.20em]"
+        style={{ color: success ? "#6ee7b7" : "#ffb380" }}
         aria-hidden="true"
       >
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        Live RAG
+        {success ? (
+          <Check className="h-3.5 w-3.5" />
+        ) : (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        )}
+        {success ? "Synthesis Complete" : "Live RAG"}
       </span>
       {STAGES.map((stage, i) => {
-        const isComplete = i < activeIdx;
-        const isActive = i === activeIdx && pending;
+        const isComplete = success || i < activeIdx;
+        const isActive = !success && i === activeIdx && pending;
         return (
           <PipelineStage
             key={stage.id}

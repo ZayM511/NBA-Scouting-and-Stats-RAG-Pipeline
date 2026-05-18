@@ -256,10 +256,13 @@ export interface HeaderPayload {
   team_directory: Record<string, TeamMeta>;
 }
 
+export type TickerScope = "playoffs" | "regular";
+
 export async function getHeader(
   mode: "auto" | HeaderMode = "auto",
+  scope: TickerScope = "playoffs",
 ): Promise<HeaderPayload> {
-  const res = await fetch(`${API_URL}/api/header?mode=${mode}`);
+  const res = await fetch(`${API_URL}/api/header?mode=${mode}&scope=${scope}`);
   if (!res.ok) throw new Error(`GET /api/header ${res.status}`);
   return (await res.json()) as HeaderPayload;
 }

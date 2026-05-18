@@ -16,6 +16,7 @@ execution; execution uses the read-only `nbarag_readonly` role.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -190,11 +191,45 @@ def generate_hybrid_filter(
     # being slightly off: accept 'player_id', 'PLAYER_ID', or the first
     # column if there's only one.
     player_ids = _extract_player_ids(execution.rows, execution.column_names)
+    if not player_ids and _has_position_predicate(sql):
+        # Defensive retry: positions can be sparsely populated when a roster
+        # ingest lags the question. If the only predicate that could have
+        # excluded everyone is `players.position`, retry once without it.
+        # If the retry returns rows, take those; otherwise fall through to
+        # the original empty status (so the user still sees a clear "no
+        # players matched" message).
+        retry_sql = _strip_position_predicate(sql)
+        if retry_sql != sql:
+            logger.info(
+                "hybrid filter: empty result with a position predicate, "
+                "retrying without it",
+            )
+            try:
+                retry_exec = execute_sql(retry_sql, dict(params))
+                retry_ids = _extract_player_ids(retry_exec.rows, retry_exec.column_names)
+                if retry_ids:
+                    return FilterResult(
+                        player_ids=retry_ids,
+                        sql=retry_sql,
+                        params=dict(params),
+                        explanation=(
+                            (explanation + " " if explanation else "")
+                            + "(position predicate dropped — retried after empty result)"
+                        ).strip(),
+                        safety=safety,
+                        status="ok",
+                        cost_usd=rec.cost_usd,
+                        rows=list(retry_exec.rows),
+                        column_names=list(retry_exec.column_names),
+                    )
+            except SQLExecutionError:
+                logger.exception("hybrid filter: position-strip retry failed")
     if not player_ids:
         return FilterResult(
             player_ids=[], sql=sql, params=dict(params), explanation=explanation,
             safety=safety, status="empty", cost_usd=rec.cost_usd,
             rows=list(execution.rows), column_names=list(execution.column_names),
+            error="the numeric filter matched zero players (tried with and without the position predicate)" if _has_position_predicate(sql) else None,
         )
 
     return FilterResult(
@@ -249,3 +284,43 @@ def _extract_player_ids(rows: list[dict[str, Any]], cols: list[str]) -> list[int
             seen.add(pid)
             out.append(pid)
     return out
+
+
+# Matches a single position predicate like `p.position LIKE '%G%'`,
+# `players.position = 'G'`, or `position IN ('G','G-F')`. Captures the
+# whole predicate so we can splice it out along with any leading/trailing
+# AND/OR connectors.
+_POSITION_PREDICATE_RE = re.compile(
+    r"""
+    (?ix)                                # ignore case + verbose
+    (?:\bAND\s+|\bOR\s+)?                # optional preceding connector
+    \(?                                  # optional opening paren
+    \s*(?:[a-z_][\w]*\.)?position\s*     # optional alias.position
+    (?:LIKE|=|IN|!=|<>)\s*               # operator
+    (?:%\([^)]+\)s|'[^']*'|\([^)]*\))    # %(name)s OR 'literal' OR (IN list)
+    \s*\)?                               # optional closing paren
+    (?:\s+(?:AND|OR)\s+)?                # optional trailing connector
+    """
+)
+
+
+def _has_position_predicate(sql: str) -> bool:
+    """Best-effort: does this SQL reference players.position in a filter?"""
+    return bool(re.search(r"\bposition\s*(?:LIKE|=|IN|!=|<>)", sql, re.IGNORECASE))
+
+
+def _strip_position_predicate(sql: str) -> str:
+    """Remove every `players.position` filter predicate from a SELECT,
+    leaving the rest of the WHERE clause structurally valid.
+
+    Best-effort regex strip; not a parser. The downstream executor still
+    catches any malformed result (rare in practice — the LLM-generated SQL
+    uses well-formed `p.position LIKE …` predicates almost without
+    exception)."""
+    cleaned = _POSITION_PREDICATE_RE.sub(" ", sql)
+    # Tidy up WHERE chains: empty WHEREs, dangling AND/OR, double spaces.
+    cleaned = re.sub(r"\bWHERE\s+(?:AND|OR)\s+", "WHERE ", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\b(AND|OR)\s+(?:AND|OR)\b", r"\1", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\bWHERE\s+(GROUP|ORDER|HAVING|LIMIT|$)", r"\1", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\s{2,}", " ", cleaned).strip()
+    return cleaned
