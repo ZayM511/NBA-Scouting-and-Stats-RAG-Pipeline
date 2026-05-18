@@ -2,7 +2,9 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { Compass, Database, GitBranch, Layers, Quote, Search } from "lucide-react";
+import type { AskResponse } from "@/lib/api";
 import type { Turn } from "./TurnCard";
+import { CopyButton } from "./CopyButton";
 import { RouteBadge } from "./RouteBadge";
 import { RetrievalPanel } from "./RetrievalPanel";
 import { StatsPanel } from "./StatsPanel";
@@ -23,14 +25,17 @@ export function Sidebar({ turn }: Props) {
   return (
     <div className="flex h-full flex-col">
       <div className="border-b hairline px-5 py-3.5">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Compass className="h-3.5 w-3.5 text-text-muted" />
             <span className="text-[11px] uppercase tracking-[0.18em] text-text-muted">
               Trace
             </span>
           </div>
-          <RouteBadge route={r.route.route} reasoning={r.route.reasoning} />
+          <div className="flex items-center gap-2">
+            <CopyButton value={buildTraceText(turn.question, r)} label="Copy trace" compact />
+            <RouteBadge route={r.route.route} reasoning={r.route.reasoning} />
+          </div>
         </div>
       </div>
 
@@ -101,6 +106,74 @@ export function Sidebar({ turn }: Props) {
       </div>
     </div>
   );
+}
+
+/**
+ * buildTraceText — render the trace data into a plain-text bundle the
+ * user can paste into a notebook or chat. Order mirrors the on-screen
+ * sections so the copied text reads top-to-bottom the same way the
+ * sidebar does.
+ */
+function buildTraceText(question: string, r: AskResponse): string {
+  const lines: string[] = [];
+  lines.push(`Q: ${question}`);
+  lines.push(`Route: ${r.route.route}`);
+  lines.push(`Reasoning: ${r.route.reasoning}`);
+  lines.push("");
+
+  if (r.stats?.sql) {
+    lines.push("## Stats · SQL");
+    lines.push("```sql");
+    lines.push(r.stats.sql);
+    lines.push("```");
+    if (r.stats.explanation) {
+      lines.push(`Explanation: ${r.stats.explanation}`);
+    }
+    if (r.stats.row_count != null) {
+      lines.push(`Rows: ${r.stats.row_count}`);
+    }
+    lines.push("");
+  }
+
+  if (r.hybrid) {
+    lines.push("## Hybrid filter");
+    if (r.hybrid.filter.sql) {
+      lines.push("```sql");
+      lines.push(r.hybrid.filter.sql);
+      lines.push("```");
+    }
+    if (r.hybrid.filter.explanation) {
+      lines.push(`Explanation: ${r.hybrid.filter.explanation}`);
+    }
+    if (r.hybrid.filter.player_ids.length) {
+      lines.push(`Player IDs: ${r.hybrid.filter.player_ids.join(", ")}`);
+    }
+    lines.push("");
+  }
+
+  const ret = r.retrieval ?? r.hybrid?.retrieval ?? null;
+  if (ret) {
+    lines.push(`## Retrieval (${ret.merged_count} chunks)`);
+    for (const c of ret.chunks) {
+      const snippet = c.text.length > 220 ? `${c.text.slice(0, 220)}…` : c.text;
+      lines.push(
+        `- chunk ${c.chunk_id} · ${c.source} · score ${c.score.toFixed(3)}`,
+      );
+      lines.push(`  ${snippet}`);
+    }
+    lines.push("");
+  }
+
+  if (r.synthesis) {
+    lines.push("## Answer");
+    lines.push(r.synthesis.answer);
+    if (r.synthesis.cited_chunk_ids.length) {
+      lines.push("");
+      lines.push(`Cited chunks: ${r.synthesis.cited_chunk_ids.join(", ")}`);
+    }
+  }
+
+  return lines.join("\n");
 }
 
 function Section({

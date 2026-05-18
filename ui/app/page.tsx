@@ -52,7 +52,18 @@ export default function Home() {
     }
 
     try {
-      const response = await postAsk({ question });
+      // Build a short conversation history (last 2 completed turns) so the
+      // backend's SQL filter can resolve pronouns like "him" / "those
+      // players" in follow-up questions. Pending and errored turns are
+      // skipped because they have no answer text to anchor against.
+      const history = turns
+        .filter((t) => t.status === "ok" && t.response?.answer)
+        .slice(-2)
+        .flatMap((t) => [
+          { role: "user" as const, content: t.question },
+          { role: "assistant" as const, content: t.response!.answer },
+        ]);
+      const response = await postAsk({ question, history });
       setTurns((t) =>
         t.map((x, i) => (i === idx ? { ...x, status: "ok", response } : x)),
       );

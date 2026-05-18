@@ -107,12 +107,18 @@ class HybridFilterError(Exception):
 def generate_hybrid_filter(
     question: str,
     *,
+    history: list[dict[str, str]] | None = None,
     model: Model = Model.SONNET,
     client: anthropic.Anthropic | None = None,
     session_id: str = "hybrid-filter",
     max_output_tokens: int = 1024,
 ) -> FilterResult:
     """Generate + safety-review + execute the hybrid SQL filter.
+
+    `history` is an optional list of Anthropic-style {role, content} dicts
+    representing prior turns. When present, it's injected as a "Prior
+    conversation" section above the user's current question so the model
+    can resolve pronouns like "him" / "that player" in follow-ups.
 
     Returns a FilterResult. Caller should check `status == 'ok'` before
     using `player_ids`. Empty results (`status == 'empty'`) are not
@@ -127,7 +133,7 @@ def generate_hybrid_filter(
             api_key=settings.anthropic_api_key.get_secret_value()
         )
 
-    user_message = question.strip()
+    user_message = _build_user_message(question.strip(), history)
 
     with guarded_call(
         session_id=session_id,
@@ -243,6 +249,33 @@ def generate_hybrid_filter(
         rows=list(execution.rows),
         column_names=list(execution.column_names),
     )
+
+
+def _build_user_message(
+    question: str, history: list[dict[str, str]] | None
+) -> str:
+    """Prepend a compact prior-conversation block to the question when the
+    caller passed any history. The model uses this to resolve pronouns
+    ("him", "that player") in follow-up questions.
+
+    History is capped to the last 2 turns so prompt-token budgets stay
+    bounded; older turns rarely add resolution power beyond that.
+    """
+    if not history:
+        return question
+    trimmed = history[-4:]
+    lines: list[str] = ["Prior conversation:"]
+    for msg in trimmed:
+        role = msg.get("role", "").strip()
+        content = (msg.get("content") or "").strip()
+        if not role or not content:
+            continue
+        prefix = "User" if role == "user" else "Assistant"
+        snippet = content[:400] + ("…" if len(content) > 400 else "")
+        lines.append(f"{prefix}: {snippet}")
+    lines.append("")
+    lines.append(f"Current question: {question}")
+    return "\n".join(lines)
 
 
 def _extract_player_ids(rows: list[dict[str, Any]], cols: list[str]) -> list[int]:

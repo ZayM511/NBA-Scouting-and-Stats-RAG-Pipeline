@@ -288,9 +288,13 @@ def test_upcoming_shows_countdown_and_local_time(goto_home):
     countdown = page.locator('[data-testid="upcoming-countdown"]')
     assert countdown.count() == 1, "segmented countdown timer missing"
     text = countdown.text_content() or ""
-    # Expect the digit cells to contribute padded numbers + their letter
-    # labels (S for seconds, M for minutes, etc.) below the digits.
-    assert re.search(r"\d{2}.*S", text), f"countdown text missing digits + labels: {text!r}"
+    # After the size pass that matched the countdown to the team-shield
+    # height, the per-cell HR/M/S text labels live in aria-label only;
+    # the visible text is just padded digits and colons. Expect at least
+    # one HH:MM pattern.
+    assert re.search(r"\d{2}:\d{2}", text), (
+        f"countdown text missing HH:MM digits: {text!r}"
+    )
 
 
 def test_live_banner_shows_scores(goto_home):
@@ -609,10 +613,17 @@ def test_pipeline_progress_renders_when_pending(goto_home):
     )
     assert state["found"], "pipeline-progress banner didn't render during pending"
     stage_ids = [s["id"] for s in state["stages"]]
+    # New 5-stage flow: User Question -> Query Router -> [path] -> Synthesis
+    # -> Answer + Sources. Path tile id varies by route (path-pending while
+    # the route is unknown, path-stats / path-prose / path-hybrid /
+    # path-oracle once the response lands).
+    assert "pipeline-stage-question" in stage_ids
     assert "pipeline-stage-router" in stage_ids
-    assert "pipeline-stage-retrieval" in stage_ids
-    assert "pipeline-stage-rerank" in stage_ids
+    assert any(s.startswith("pipeline-stage-path-") for s in stage_ids), (
+        f"no path stage present: {stage_ids}"
+    )
     assert "pipeline-stage-synthesis" in stage_ids
+    assert "pipeline-stage-answer" in stage_ids
     # At least one stage should be active at this instant.
     assert any(s["active"] for s in state["stages"]), (
         f"no stage active: {state['stages']}"

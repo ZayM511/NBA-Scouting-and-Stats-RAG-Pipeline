@@ -52,6 +52,17 @@ logger = logging.getLogger(__name__)
 # --------------------------------------------------------------------------- #
 
 
+class HistoryMessage(BaseModel):
+    """One prior turn of conversation context, Anthropic-style.
+
+    The UI builds a list of these from the in-memory conversation so
+    follow-up questions can resolve pronouns against the previous
+    answer."""
+
+    role: str = Field(..., pattern=r"^(user|assistant)$")
+    content: str = Field(..., min_length=1, max_length=4000)
+
+
 class AskRequest(BaseModel):
     """Request body for POST /ask."""
 
@@ -65,6 +76,9 @@ class AskRequest(BaseModel):
     # everyone sharing one global "api" bucket. Constrained to safe chars
     # so a malicious value can't be used as a log-injection vector.
     session_id: str | None = Field(None, pattern=r"^[A-Za-z0-9_\-]{1,64}$")
+    # Prior conversation context for follow-up questions. Capped at 6
+    # entries so a misbehaving client can't blow through the token budget.
+    history: list[HistoryMessage] | None = Field(None, max_length=6)
 
 
 class RouteOut(BaseModel):
@@ -370,6 +384,7 @@ def ask_endpoint(req: AskRequest) -> AskResponse:
             reranker=services.reranker,
             synthesizer=services.synthesizer,
             sql_generator=services.sql_generator,
+            history=[h.model_dump() for h in req.history] if req.history else None,
             session_id=req.session_id or "api",
         )
     except Exception as exc:

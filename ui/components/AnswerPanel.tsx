@@ -1,6 +1,7 @@
 import { Fragment } from "react";
 import { Sparkles } from "lucide-react";
 import type { CitationOut } from "@/lib/api";
+import { CopyButton } from "./CopyButton";
 
 interface Props {
   answer: string;
@@ -21,6 +22,12 @@ export function AnswerPanel({ answer, citations, declined }: Props) {
           The model declined to answer with the available context.
         </div>
       )}
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">
+          Answer
+        </span>
+        <CopyButton value={answer} label="Copy answer" compact />
+      </div>
       <div className="space-y-3">
         {answer.split(/\n{2,}/).map((para, pi) => (
           <p

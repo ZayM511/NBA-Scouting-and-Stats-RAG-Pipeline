@@ -89,12 +89,19 @@ export interface AskResponse {
   elapsed_ms: number;
 }
 
+export interface HistoryMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
 export interface AskRequest {
   question: string;
   top_k?: number;
   player_ids?: number[] | null;
   source?: string | null;
   session_id?: string | null;
+  /** Prior conversation context so follow-ups can resolve pronouns. */
+  history?: HistoryMessage[] | null;
 }
 
 // --- Session cost ledger ---------------------------------------------------

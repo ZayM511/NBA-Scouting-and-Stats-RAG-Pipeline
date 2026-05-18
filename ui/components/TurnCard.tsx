@@ -7,6 +7,7 @@ import type { AskResponse } from "@/lib/api";
 import { RouteBadge } from "./RouteBadge";
 import { CostBadge } from "./CostBadge";
 import { AnswerPanel } from "./AnswerPanel";
+import { CopyButton } from "./CopyButton";
 import { PipelineProgressBanner } from "./PipelineProgressBanner";
 
 export interface Turn {
@@ -44,15 +45,22 @@ export function TurnCard({ turn, index, isSelected, onSelect }: Props) {
         : null;
 
   return (
-    <motion.button
-      type="button"
+    <motion.div
+      role="button"
+      tabIndex={0}
       layout
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, ease: "easeOut" }}
       onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
       className={cn(
-        "group relative block w-full text-left rounded-2xl border bg-surface/70 backdrop-blur-md",
+        "group relative block w-full text-left rounded-2xl border bg-surface/70 backdrop-blur-md cursor-pointer",
         "transition-all overflow-hidden",
         isSelected
           ? "border-[rgba(255,106,31,0.45)] shadow-[0_0_0_1px_rgba(255,106,31,0.35),0_12px_40px_-12px_rgba(255,106,31,0.35)]"
@@ -76,6 +84,7 @@ export function TurnCard({ turn, index, isSelected, onSelect }: Props) {
         <p className="flex-1 text-[15px] font-medium leading-6 text-text">
           {turn.question}
         </p>
+        <CopyButton value={turn.question} label="Copy" compact />
         <span className="font-mono text-[10px] text-text-dim">#{index + 1}</span>
       </div>
 
@@ -133,7 +142,7 @@ export function TurnCard({ turn, index, isSelected, onSelect }: Props) {
           )}
         </div>
       )}
-    </motion.button>
+    </motion.div>
   );
 }
 

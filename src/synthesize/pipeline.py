@@ -67,9 +67,15 @@ def ask(
     reranker: Reranker | None = None,
     synthesizer: Synthesizer | None = None,
     sql_generator: SQLGenerator | None = None,
+    history: list[dict[str, str]] | None = None,
     session_id: str = "ask",
 ) -> AskResult:
     """Run the full ask pipeline for one user question.
+
+    `history` is an optional list of prior {role, content} turns the UI
+    keeps for the current conversation. It is threaded into the SQL
+    filter prompt so follow-up questions with pronouns ("him", "those
+    players") can be resolved against the most recent answer.
 
     Reuse the service instances across multiple `ask()` calls in one
     process so HTTP sessions and Anthropic clients stay warm.
@@ -108,6 +114,7 @@ def ask(
         embedder=embedder,
         reranker=reranker,
         synthesizer=synthesizer,
+        history=history,
         session_id=session_id,
     )
 
@@ -226,6 +233,7 @@ def _ask_hybrid(
     embedder: Embedder | None,
     reranker: Reranker | None,
     synthesizer: Synthesizer | None,
+    history: list[dict[str, str]] | None,
     session_id: str,
 ) -> AskResult:
     own_embedder = embedder is None
@@ -238,6 +246,7 @@ def _ask_hybrid(
             top_k=top_k,
             embedder=embedder,
             reranker=reranker,
+            history=history,
             session_id=session_id,
         )
     finally:
@@ -246,7 +255,9 @@ def _ask_hybrid(
         if own_reranker:
             reranker.close()
 
-    if hybrid.status != "ok":
+    # 'ok' — normal happy path. 'fallback_prose' — filter failed but we
+    # got prose chunks via the fallback retrieval; still worth synthesizing.
+    if hybrid.status not in ("ok", "fallback_prose"):
         return AskResult(
             question=question,
             route=decision,
@@ -254,7 +265,22 @@ def _ask_hybrid(
             notes=hybrid.notes,
         )
 
-    # Resolve canonical names for the narrowed player_ids (small lookup).
+    if hybrid.status == "fallback_prose" and hybrid.retrieval is not None:
+        # No player_ids to resolve — answer from the prose chunks directly.
+        # Use the prose synthesizer so the model knows the source format.
+        synthesizer = synthesizer or Synthesizer()
+        syn = synthesizer.synthesize(
+            question, hybrid.retrieval.chunks, session_id=session_id
+        )
+        return AskResult(
+            question=question,
+            route=decision,
+            hybrid=hybrid,
+            synthesis=syn,
+            notes=hybrid.notes,
+        )
+
+    # Happy path: resolve canonical names for the narrowed player_ids.
     narrowed_names = _lookup_player_names(hybrid.filter.player_ids)
 
     synthesizer = synthesizer or Synthesizer()
