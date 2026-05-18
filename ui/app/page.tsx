@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { postAsk, getHealth } from "@/lib/api";
+import { postAsk, getHealth, resetSessionId } from "@/lib/api";
 import { buildLoreResponse, isSelfQuestion } from "@/lib/oracleLore";
 import { ChatInput, type ChatInputHandle } from "@/components/ChatInput";
 import { GalaxyBackground } from "@/components/GalaxyBackground";
@@ -79,6 +79,9 @@ export default function Home() {
     setTurns([]);
     setSelected(null);
     setHeroKey((k) => k + 1);
+    // Fresh ledger against the $0.50 per-session cost ceiling so demos and
+    // back-to-back conversations don't bleed into one another's budget.
+    resetSessionId();
   }
 
   const pending = turns.some((t) => t.status === "pending");

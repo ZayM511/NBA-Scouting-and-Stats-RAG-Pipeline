@@ -290,9 +290,12 @@ export function TopRowUpcoming({ game }: { game: UpcomingGame }) {
         <TeamShield team={game.home} side="left" size="md" rotate={0} />
       </div>
       <CountdownTimer iso={game.tipoff_utc} />
-      <span className="hidden lg:inline-flex items-center gap-1 text-[12px] text-text-muted">
-        <Clock className="h-3.5 w-3.5" />
-        {userTime}
+      <span
+        data-testid="upcoming-local-time"
+        className="hidden lg:inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-[12px] text-text-muted"
+      >
+        <Clock className="h-3.5 w-3.5 shrink-0" />
+        <span className="whitespace-nowrap tabular-nums">{userTime}</span>
       </span>
     </motion.div>
   );

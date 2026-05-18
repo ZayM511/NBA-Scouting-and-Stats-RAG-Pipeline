@@ -59,6 +59,12 @@ class AskRequest(BaseModel):
     top_k: int = Field(8, ge=1, le=20)
     player_ids: list[int] | None = None
     source: str | None = None
+    # Per-user session token used by the guardrail cost tracker. The UI mints
+    # one UUID per browser session (and rotates it when the user clicks
+    # "New chat"), so each UI session gets its own $0.50 ledger instead of
+    # everyone sharing one global "api" bucket. Constrained to safe chars
+    # so a malicious value can't be used as a log-injection vector.
+    session_id: str | None = Field(None, pattern=r"^[A-Za-z0-9_\-]{1,64}$")
 
 
 class RouteOut(BaseModel):
@@ -352,7 +358,7 @@ def ask_endpoint(req: AskRequest) -> AskResponse:
             reranker=services.reranker,
             synthesizer=services.synthesizer,
             sql_generator=services.sql_generator,
-            session_id="api",
+            session_id=req.session_id or "api",
         )
     except Exception as exc:
         logger.exception("ask endpoint failed")

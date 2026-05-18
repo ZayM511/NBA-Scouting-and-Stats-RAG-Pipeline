@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Database, Home, Plus } from "lucide-react";
+import { Database, Home } from "lucide-react";
 import { BrandMark } from "./BrandMark";
 import { NBASeasonBadge } from "./NBASeasonBadge";
 import { HeaderTicker } from "./HeaderTicker";
@@ -114,9 +114,11 @@ export function Header({ healthOk, canGoHome, onHome }: Props) {
           <NBASeasonBadge />
           <div className="flex-1" />
 
-          {/* State banner — h-16 matches the NBA badge height (py-2 + h-12). */}
+          {/* State banner — h-16 matches the NBA badge height (py-2 + h-12).
+              Widened from 640->720 so the upcoming variant's "5:30 PM PDT"
+              local-time row fits on one line next to the countdown timer. */}
           <div className="hidden min-w-0 items-center justify-end md:flex">
-            <div className="h-16 w-[640px] max-w-[640px]">
+            <div className="h-16 w-[720px] max-w-[720px]">
               <HeaderStateBanner payload={payload} err={err} />
             </div>
           </div>
@@ -132,23 +134,22 @@ export function Header({ healthOk, canGoHome, onHome }: Props) {
               <motion.button
                 type="button"
                 onClick={onHome}
-                initial={{ opacity: 0, scale: 0.95 }}
+                data-testid="header-home-button"
+                initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.25 }}
-                whileHover={{ y: -1 }}
-                whileTap={{ scale: 0.97 }}
+                whileHover={{ y: -1, scale: 1.05 }}
+                whileTap={{ scale: 0.94 }}
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-medium",
+                  "inline-flex h-8 w-8 items-center justify-center rounded-md border",
                   "border-[rgba(255,106,31,0.35)] bg-[rgba(255,106,31,0.08)] text-[#ffb380]",
                   "transition-colors hover:bg-[rgba(255,106,31,0.14)] hover:border-[rgba(255,106,31,0.55)]",
                   "focus:outline-none focus-ember",
                 )}
-                aria-label="Start a new chat"
-                title="Clear conversation and return to home"
+                aria-label="Return home and start a new chat"
+                title="Return home (clears the conversation)"
               >
-                <Plus className="h-3 w-3" />
-                <span>New chat</span>
-                <Home className="hidden h-3 w-3 text-text-dim md:inline-flex" />
+                <Home className="h-4 w-4" />
               </motion.button>
             )}
             <HealthDot healthOk={healthOk} />

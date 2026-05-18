@@ -94,6 +94,43 @@ export interface AskRequest {
   top_k?: number;
   player_ids?: number[] | null;
   source?: string | null;
+  session_id?: string | null;
+}
+
+// --- Session cost ledger ---------------------------------------------------
+
+// The backend tracks LLM spend per session_id against the $0.50 per-session
+// ceiling (src/guardrails.py). When every UI request shares one global
+// session_id, that ledger fills up and stays full until the server restarts.
+// We mint a UUID per browser session, persist it in sessionStorage, and let
+// resetSessionId() rotate it (called from "New chat") so each conversation
+// gets its own fresh ledger.
+const SESSION_KEY = "bko-session-id";
+
+function randomSessionId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+export function getSessionId(): string {
+  if (typeof window === "undefined") return "ssr";
+  let id = window.sessionStorage.getItem(SESSION_KEY);
+  if (!id) {
+    id = randomSessionId();
+    window.sessionStorage.setItem(SESSION_KEY, id);
+  }
+  return id;
+}
+
+/** Clear the in-flight session ledger so the next /ask call starts fresh
+ *  against the $0.50 per-session ceiling. */
+export function resetSessionId(): string {
+  if (typeof window === "undefined") return "ssr";
+  const id = randomSessionId();
+  window.sessionStorage.setItem(SESSION_KEY, id);
+  return id;
 }
 
 // API_URL defaults to the local FastAPI dev server. Override at build time with
@@ -104,10 +141,14 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
  *  one-sentence error the TurnCard can show without exposing raw provider
  *  JSON to the user. */
 export async function postAsk(body: AskRequest): Promise<AskResponse> {
+  const withSession: AskRequest = {
+    ...body,
+    session_id: body.session_id ?? getSessionId(),
+  };
   const res = await fetch(`${API_URL}/ask`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify(withSession),
   });
   if (res.ok) return (await res.json()) as AskResponse;
 
