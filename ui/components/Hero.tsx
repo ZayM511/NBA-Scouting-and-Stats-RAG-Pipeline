@@ -93,7 +93,7 @@ export function Hero({ onSuggestion, runKey = 0 }: Props) {
         }}
       />
 
-      <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-col items-center gap-4 pt-[34vh] text-center">
+      <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-col items-center gap-3 pt-[22vh] text-center">
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}

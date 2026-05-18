@@ -231,46 +231,52 @@ export function AboutTheOracle({
             transition={{ duration: 0.35, ease: [0.32, 0.72, 0, 1] }}
             className="relative z-10 mt-3 overflow-hidden rounded-2xl border hairline-strong bg-surface/80 backdrop-blur-xl"
           >
-            <div className="relative px-5 pb-4 pt-5">
-              <div className="absolute -top-2.5 left-4 inline-flex items-center gap-1.5 rounded-md border hairline-strong bg-bg/90 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-text-muted">
-                <span
-                  className="h-1 w-1 rounded-full"
-                  style={{ background: "#ff6a1f", boxShadow: "0 0 8px #ff6a1f" }}
-                />
-                Transmission · live
-              </div>
-              {/* Always-available controls — sit *outside* the scroll
-                  container so they're reachable regardless of scroll
-                  position. */}
-              <div className="absolute right-3 top-3 flex items-center gap-1.5">
-                {!done && (
+            <div className="relative px-5 pb-4 pt-3">
+              {/* Header row inside the panel: Transmission tag + the
+                  Skip / Close controls. Living *inside* the panel padding
+                  means the outer overflow-hidden (required for the
+                  height animation) doesn't clip them at the top edge. */}
+              <div className="flex items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-md border hairline-strong bg-bg/85 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-text-muted">
+                  <span
+                    className="h-1 w-1 rounded-full"
+                    style={{ background: "#ff6a1f", boxShadow: "0 0 8px #ff6a1f" }}
+                  />
+                  Transmission · live
+                </span>
+                <div className="flex items-center gap-1.5">
+                  {!done && (
+                    <button
+                      type="button"
+                      data-testid="about-skip"
+                      onClick={handleSkip}
+                      className="rounded-md border hairline bg-surface/70 px-2 py-1 text-[10px] uppercase tracking-wider text-text-dim transition-colors hover:border-[rgba(255,106,31,0.4)] hover:text-[#ffb380]"
+                    >
+                      Skip
+                    </button>
+                  )}
                   <button
                     type="button"
-                    data-testid="about-skip"
-                    onClick={handleSkip}
-                    className="rounded-md border hairline bg-surface/70 px-2 py-1 text-[10px] uppercase tracking-wider text-text-dim transition-colors hover:border-[rgba(255,106,31,0.4)] hover:text-[#ffb380]"
+                    data-testid="about-close"
+                    onClick={() => setOpen(false)}
+                    aria-label="Close About panel"
+                    title="Close (Esc)"
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-md border hairline bg-surface/70 text-text-dim transition-colors hover:border-[rgba(255,106,31,0.4)] hover:text-[#ffb380]"
                   >
-                    Skip
+                    <X className="h-3.5 w-3.5" />
                   </button>
-                )}
-                <button
-                  type="button"
-                  data-testid="about-close"
-                  onClick={() => setOpen(false)}
-                  aria-label="Close About panel"
-                  title="Close (Esc)"
-                  className="inline-flex h-7 w-7 items-center justify-center rounded-md border hairline bg-surface/70 text-text-dim transition-colors hover:border-[rgba(255,106,31,0.4)] hover:text-[#ffb380]"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
+                </div>
               </div>
-              {/* Scrollable content. max-h sized so all six statements +
-                  the new one fit at ~14px line-height with a little air
-                  on a 1080-tall viewport; longer prose scrolls. */}
+              {/* Scrollable statements. Capped at 12vh so panel + both
+                  rows of suggestion chips fit between the title and the
+                  chat input on a 900-tall viewport. Wheel scrolls past
+                  whatever statement is mid-type so the user can read
+                  fully-typed lines. */}
               <div
                 data-testid="about-statements"
-                className="max-h-[40vh] space-y-1.5 overflow-y-auto pr-2 pt-2 text-left"
+                className="mt-2 max-h-[12vh] space-y-1.5 overflow-y-auto overscroll-contain pr-2 text-left"
                 style={{ scrollbarGutter: "stable" }}
+                onWheel={(e) => e.stopPropagation()}
               >
                 {renderedLines.map((entry, i) => {
                   const isFinal = i === lines.length - 1;
