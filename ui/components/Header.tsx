@@ -3,11 +3,12 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Database, Home, Plus } from "lucide-react";
-import { BrandOrb } from "./BrandOrb";
+import { BrandMark } from "./BrandMark";
 import { NBASeasonBadge } from "./NBASeasonBadge";
 import { HeaderTicker } from "./HeaderTicker";
 import { TopRowLive, TopRowRecap, TopRowUpcoming } from "./TopRowBanners";
 import { HeaderStateToggle } from "./HeaderStateToggle";
+import { PipelineProgressBanner } from "./PipelineProgressBanner";
 import { getHeader, type HeaderMode, type HeaderPayload } from "@/lib/api";
 import { cn } from "@/lib/cn";
 
@@ -17,9 +18,11 @@ interface Props {
   canGoHome: boolean;
   /** Called when the user wants to clear the conversation and return home. */
   onHome: () => void;
+  /** When true, a question is in flight — the banner shows pipeline progress. */
+  pending?: boolean;
 }
 
-export function Header({ healthOk, canGoHome, onHome }: Props) {
+export function Header({ healthOk, canGoHome, onHome, pending = false }: Props) {
   const [payload, setPayload] = useState<HeaderPayload | null>(null);
   const [mode, setMode] = useState<HeaderMode | "auto">("auto");
   const [err, setErr] = useState<string | null>(null);
@@ -72,7 +75,7 @@ export function Header({ healthOk, canGoHome, onHome }: Props) {
             aria-label="Return to home"
             className="group flex shrink-0 items-center gap-3 rounded-xl px-2 py-1.5 -mx-2 transition-colors hover:bg-surface/60 focus:outline-none focus-ember"
           >
-            <BrandOrb size={44} />
+            <BrandMark size={44} />
             <div className="flex flex-col items-start leading-tight">
               <span className="text-[20px] font-semibold tracking-tight text-text">
                 Ball Knowledge{" "}
@@ -93,10 +96,14 @@ export function Header({ healthOk, canGoHome, onHome }: Props) {
           <NBASeasonBadge />
           <div className="flex-1" />
 
-          {/* State banner — taller (h-14), wider cap, bigger labels. */}
+          {/* State banner — h-16 matches the NBA badge height (py-2 + h-12). */}
           <div className="hidden min-w-0 items-center justify-end md:flex">
-            <div className="h-14 w-[640px] max-w-[640px]">
-              <HeaderStateBanner payload={payload} err={err} />
+            <div className="h-16 w-[640px] max-w-[640px]">
+              <HeaderStateBanner
+                payload={payload}
+                err={err}
+                pending={pending}
+              />
             </div>
           </div>
 
@@ -163,10 +170,17 @@ export function Header({ healthOk, canGoHome, onHome }: Props) {
 function HeaderStateBanner({
   payload,
   err,
+  pending,
 }: {
   payload: HeaderPayload | null;
   err: string | null;
+  pending: boolean;
 }) {
+  // Pipeline overrides everything else: while a question is mid-flight,
+  // the banner is the user's live status feedback.
+  if (pending) {
+    return <PipelineProgressBanner pending={pending} />;
+  }
   if (err) {
     return (
       <div className="flex h-full items-center text-[11px] text-text-dim">

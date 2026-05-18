@@ -95,7 +95,12 @@ export default function Home() {
       </div>
 
       <IntroVideo />
-      <Header healthOk={healthOk} canGoHome={!isEmpty} onHome={handleHome} />
+      <Header
+        healthOk={healthOk}
+        canGoHome={!isEmpty}
+        onHome={handleHome}
+        pending={pending}
+      />
 
       <div className="grid flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[1fr_440px]">
         {/* Chat / Hero column */}

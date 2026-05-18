@@ -358,17 +358,18 @@ def test_mvp_card_names_sga(page, ui_url):
 # --------------------------------------------------------------------------
 
 
-def test_brand_orb_canvas_mounts(goto_home):
-    """The header brand glyph is now a tiny Three.js canvas (replacing the
-    old SVG BrandMark). Confirm it's there with a usable width/height."""
+def test_brand_glyph_is_svg_not_canvas(goto_home):
+    """The header brand glyph is the SVG `BrandMark` (counter-rotating
+    rings + ember core). The previous GLB-canvas approach rendered with a
+    visible square crop and was reverted. This test locks the choice."""
     page = goto_home()
-    page.wait_for_function(
-        """() => {
-            const c = document.querySelector('[data-testid="brand-orb"] canvas');
-            return c && c.width > 0 && c.height > 0;
-        }""",
-        timeout=10_000,
+    brand = page.locator('[data-testid="brand-home"]')
+    # No <canvas> inside the brand button (no Three.js mounting here).
+    assert brand.locator("canvas").count() == 0, (
+        "brand glyph should be SVG, not a Three.js canvas"
     )
+    # Must contain at least one <svg> (BrandMark's ring + core).
+    assert brand.locator("svg").count() >= 1, "BrandMark SVG missing"
 
 
 def test_brand_subtitle_includes_rag_and_byline(goto_home):
@@ -380,13 +381,185 @@ def test_brand_subtitle_includes_rag_and_byline(goto_home):
 
 
 def test_nba_badge_image_is_zoomed(goto_home):
-    """The NBA pictogram inside the white card is rendered scaled-up so it
-    fills the card edge to edge."""
+    """The NBA pictogram inside the white card is rendered slightly larger
+    than its container so the figure reads as fitted (not floating in
+    empty space). The earlier aggressive zoom (1.28) cropped the figure;
+    the current value targets ~1.05 — between 1.0 and 1.15."""
     page = goto_home()
     img = page.locator('[data-testid="nba-logo-image"]').first
     transform = img.evaluate("el => getComputedStyle(el).transform")
-    # `matrix(a,b,c,d,e,f)` — a == scale on X. Anything > 1.0 means we
-    # zoomed the figure beyond its container.
     assert transform.startswith("matrix"), f"unexpected transform: {transform}"
     a_value = float(transform.split("(")[1].split(",")[0])
-    assert a_value > 1.1, f"NBA logo not visibly zoomed (scale {a_value})"
+    assert 1.0 <= a_value <= 1.15, (
+        f"NBA logo scale {a_value} outside the [1.00, 1.15] band — too much "
+        "zoom crops the figure, too little leaves empty margin"
+    )
+
+
+# --------------------------------------------------------------------------
+# 9. Truthful awards, uniform banner, pipeline progress (this round).
+# --------------------------------------------------------------------------
+
+
+def test_clutch_card_does_not_credit_brunson(page, ui_url):
+    """The Clutch POY hasn't been announced — SGA leads the polls. Make
+    sure no Clutch card hard-attributes the *award* to Brunson. (The
+    separate Clutch TS% LEADER stat card is fine — that's a real DB-
+    derived efficiency leader, not an award.)"""
+    resp = page.request.get(f"{ui_url.replace(':3002', ':8000')}/api/header")
+    data = resp.json()
+    cpoy_cards = [h for h in data["headlines"] if "CLUTCH POY" in h["label"]]
+    assert cpoy_cards, "no Clutch POY award card"
+    card = cpoy_cards[0]
+    assert "Brunson" not in card["primary"], f"CPOY still credits Brunson: {card}"
+    assert "LEADING" in card["label"].upper() or "Shai" in card["primary"], (
+        f"CPOY card not marked as leader-only: {card}"
+    )
+
+
+def test_unannounced_awards_marked_leading(page, ui_url):
+    """Every non-MVP / non-Finals-MVP award must read as 'leading the
+    polls' or 'projected' — never a confirmed winner."""
+    resp = page.request.get(f"{ui_url.replace(':3002', ':8000')}/api/header")
+    data = resp.json()
+    award_keywords = [
+        "DEFENSIVE PLAYER",
+        "MOST IMPROVED",
+        "COACH OF THE YEAR",
+        "SIXTH MAN",
+        "ROOKIE OF THE YEAR",
+        "ALL-NBA",
+    ]
+    for kw in award_keywords:
+        cards = [h for h in data["headlines"] if kw in h["label"].upper()]
+        assert cards, f"no card found for {kw}"
+        card = cards[0]
+        text = f"{card['label']} {card['secondary']} {card['metric']}".upper()
+        assert ("LEADING" in text) or ("PROJECTED" in text) or ("WATCH" in text), (
+            f"Award card for {kw} doesn't mark itself as leader/projected: {card}"
+        )
+
+
+def test_mvp_card_is_only_confirmed_award(page, ui_url):
+    """MVP (and Finals MVP TBD) are the only awards the demo treats as
+    settled. MVP names Shai outright; everything else uses a watch label."""
+    resp = page.request.get(f"{ui_url.replace(':3002', ':8000')}/api/header")
+    data = resp.json()
+    mvp = [
+        h for h in data["headlines"]
+        if h["label"].startswith("MVP") and "Shai" in h["primary"]
+    ]
+    assert mvp, "MVP card with Shai missing"
+    # Should NOT include a "LEADING" qualifier.
+    assert "LEADING" not in mvp[0]["label"].upper(), (
+        "MVP is announced — shouldn't be flagged as leading"
+    )
+
+
+def test_suggestion_chips_show_full_text(goto_home):
+    """Each chip's text should fit without an ellipsis. The third chip
+    was the regression target — its prior copy got truncated."""
+    page = goto_home()
+    # Find the chip whose visible text mentions off-ball — that's the
+    # one whose previous copy clipped at "from t…".
+    third = page.locator('button:has-text("off-ball")')
+    assert third.count() >= 1, "Q3 chip ('off-ball' question) missing"
+    text = third.first.text_content() or ""
+    assert "off-ball" in text, f"Q3 chip text missing 'off-ball': {text!r}"
+    # The inner text span shouldn't have text-overflow:ellipsis applied.
+    # Locate the span carrying the question text — it's the one with
+    # whitespace-nowrap class (or whichever inner span exists).
+    overflow = third.first.evaluate(
+        """el => {
+            const spans = el.querySelectorAll('span');
+            for (const s of spans) {
+                const style = getComputedStyle(s);
+                if (style.textOverflow === 'ellipsis') return 'ellipsis';
+            }
+            return 'ok';
+        }"""
+    )
+    assert overflow == "ok", (
+        f"a chip text span has text-overflow:ellipsis: {overflow}"
+    )
+
+
+def test_banner_height_matches_nba_badge(goto_home):
+    """Recap/upcoming/live banner must visually match the NBA badge in
+    height (the user explicitly called this out)."""
+    page = goto_home()
+    badge = page.locator('[data-testid="nba-season-badge"]').bounding_box()
+    banner = None
+    for testid in ("top-recap", "top-live", "top-upcoming", "pipeline-progress"):
+        loc = page.locator(f'[data-testid="{testid}"]')
+        if loc.count():
+            banner = loc.bounding_box()
+            break
+    assert badge and banner, "couldn't find both badge and banner"
+    # Allow ±3 px difference (rounding / borders).
+    diff = abs(badge["height"] - banner["height"])
+    assert diff <= 3, (
+        f"banner height {banner['height']} doesn't match NBA badge "
+        f"{badge['height']} (diff {diff}px)"
+    )
+
+
+def test_recap_label_full_text_at_default_viewport(goto_home):
+    """At 1480x900 the recap banner must show the full 'FINAL · CONFERENCE
+    SEMIS' label, not the short 'FINAL' fallback."""
+    page = goto_home()
+    recap = page.locator('[data-testid="top-recap"]')
+    if recap.count() == 0:
+        # Recap isn't the default mode right now; force it via the dev toggle.
+        toggle = page.locator('button[aria-label="Header preview modes"]')
+        toggle.click()
+        page.locator('button:has-text("Recap")').first.click()
+        toggle.click()
+        page.wait_for_selector('[data-testid="top-recap"]', timeout=10_000)
+        recap = page.locator('[data-testid="top-recap"]')
+    text = (recap.text_content() or "").upper()
+    assert "FINAL" in text
+    assert "CONFERENCE SEMIS" in text, (
+        f"recap label collapsed to 'FINAL'-only at this viewport: {text!r}"
+    )
+
+
+def test_pipeline_progress_renders_when_pending(goto_home):
+    """While a question is in flight, the state-banner slot switches to
+    the pipeline-progress view. We use a self-referential ('who are you?')
+    question because the lore intercept gives a deterministic ~650 ms
+    pending window we can sample from the DOM."""
+    page = goto_home()
+    state = page.evaluate(
+        """async () => {
+            const ta = document.querySelector('textarea');
+            const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+            setter.call(ta, 'who are you?');
+            ta.dispatchEvent(new Event('input', { bubbles: true }));
+            ta.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+            for (let i = 0; i < 60; i++) {
+                const el = document.querySelector('[data-testid="pipeline-progress"]');
+                if (el) {
+                    const stages = Array.from(
+                        document.querySelectorAll('[data-testid^="pipeline-stage-"]')
+                    ).map(s => ({
+                        id: s.getAttribute('data-testid'),
+                        active: s.getAttribute('data-active') === 'true',
+                    }));
+                    return { found: true, stages };
+                }
+                await new Promise(r => setTimeout(r, 20));
+            }
+            return { found: false };
+        }"""
+    )
+    assert state["found"], "pipeline-progress banner didn't render during pending"
+    stage_ids = [s["id"] for s in state["stages"]]
+    assert "pipeline-stage-router" in stage_ids
+    assert "pipeline-stage-retrieval" in stage_ids
+    assert "pipeline-stage-rerank" in stage_ids
+    assert "pipeline-stage-synthesis" in stage_ids
+    # At least one stage should be active at this instant.
+    assert any(s["active"] for s in state["stages"]), (
+        f"no stage active: {state['stages']}"
+    )

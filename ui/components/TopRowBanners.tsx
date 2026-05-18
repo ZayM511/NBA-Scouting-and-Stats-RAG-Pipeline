@@ -46,25 +46,28 @@ export function TopRowRecap({ game }: { game: RecentGame }) {
       }}
     >
       <Sweep />
-      <div className="flex items-center gap-1.5 text-[13px] font-semibold uppercase tracking-[0.16em] text-[#7dd3fc]">
+      <div className="flex items-center gap-1.5 text-[11.5px] font-semibold uppercase tracking-[0.16em] text-[#7dd3fc] whitespace-nowrap">
         <Crown className="h-3.5 w-3.5" />
-        <span className="hidden xl:inline">{game.label}</span>
-        <span className="xl:hidden">FINAL</span>
+        <span>{game.label}</span>
       </div>
       <div className="flex items-center gap-2">
         <span className={`font-mono text-[22px] font-bold tabular-nums ${!homeWon ? "text-[#ffb380]" : "text-text-muted"}`}>
           {game.away_score}
         </span>
-        <TeamShield team={game.away} side="left" size="md" rotate={-2} />
-        <span className="text-[11px] uppercase tracking-wider text-text-dim">FINAL</span>
-        <TeamShield team={game.home} side="right" size="md" rotate={2} />
+        <TeamShield team={game.away} side="left" size="md" rotate={0} />
+        <div className="flex flex-col items-center leading-tight">
+          <span className="text-[10.5px] font-semibold uppercase tracking-wider text-text-dim">
+            FINAL
+          </span>
+          <span className="text-[10.5px] uppercase tracking-wider text-text-dim">
+            {dateLabel}
+          </span>
+        </div>
+        <TeamShield team={game.home} side="left" size="md" rotate={0} />
         <span className={`font-mono text-[22px] font-bold tabular-nums ${homeWon ? "text-[#ffb380]" : "text-text-muted"}`}>
           {game.home_score}
         </span>
       </div>
-      <span className="hidden lg:inline text-[11px] uppercase tracking-[0.18em] text-text-dim">
-        · {dateLabel}
-      </span>
     </motion.div>
   );
 }
@@ -86,22 +89,22 @@ export function TopRowLive({ game }: { game: LiveGame }) {
       }}
     >
       <Sweep />
-      <div className="flex items-center gap-1.5 text-[13px] font-semibold uppercase tracking-[0.16em] text-[#fb7185]">
+      <div className="flex items-center gap-1.5 text-[11.5px] font-semibold uppercase tracking-[0.16em] text-[#fb7185] whitespace-nowrap">
         <span className="relative inline-flex h-2.5 w-2.5 shrink-0">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-400 opacity-75" />
           <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-rose-400" />
         </span>
         LIVE
-        <span className="hidden lg:inline text-text-dim">· Q{game.quarter} {game.clock}</span>
+        <span className="text-text-dim">· Q{game.quarter} {game.clock}</span>
       </div>
       <div className="flex items-center gap-2">
-        <span className={`font-mono text-[24px] font-bold tabular-nums ${game.away_score > game.home_score ? "text-[#ffb380]" : "text-text"}`}>
+        <span className={`font-mono text-[22px] font-bold tabular-nums ${game.away_score > game.home_score ? "text-[#ffb380]" : "text-text"}`}>
           {game.away_score}
         </span>
-        <TeamShield team={game.away} side="left" size="md" rotate={-2} />
-        <span className="text-[11px] uppercase tracking-wider text-text-dim">VS</span>
-        <TeamShield team={game.home} side="right" size="md" rotate={2} />
-        <span className={`font-mono text-[24px] font-bold tabular-nums ${game.home_score > game.away_score ? "text-[#ffb380]" : "text-text"}`}>
+        <TeamShield team={game.away} side="left" size="md" rotate={0} />
+        <span className="text-[10.5px] font-semibold uppercase tracking-wider text-text-dim">VS</span>
+        <TeamShield team={game.home} side="left" size="md" rotate={0} />
+        <span className={`font-mono text-[22px] font-bold tabular-nums ${game.home_score > game.away_score ? "text-[#ffb380]" : "text-text"}`}>
           {game.home_score}
         </span>
       </div>
@@ -170,17 +173,16 @@ export function TopRowUpcoming({ game }: { game: UpcomingGame }) {
       }}
     >
       <Sweep />
-      <div className="flex items-center gap-1.5 text-[13px] font-semibold uppercase tracking-[0.16em] text-[#ffb380]">
+      <div className="flex items-center gap-1.5 text-[11.5px] font-semibold uppercase tracking-[0.16em] text-[#ffb380] whitespace-nowrap">
         <Flame className="h-3.5 w-3.5" />
-        <span className="hidden xl:inline">{game.label}</span>
-        <span className="xl:hidden">NEXT GAME</span>
+        <span>{game.label}</span>
       </div>
       <div className="flex items-center gap-2">
-        <TeamShield team={game.away} side="left" size="md" rotate={-2} />
+        <TeamShield team={game.away} side="left" size="md" rotate={0} />
         <span className="text-[18px] font-semibold text-text">{game.away.abbr}</span>
-        <span className="text-[11px] uppercase tracking-wider text-text-dim">@</span>
+        <span className="text-[10.5px] uppercase tracking-wider text-text-dim">@</span>
         <span className="text-[18px] font-semibold text-text">{game.home.abbr}</span>
-        <TeamShield team={game.home} side="right" size="md" rotate={2} />
+        <TeamShield team={game.home} side="left" size="md" rotate={0} />
       </div>
       <motion.span
         key={countdown}

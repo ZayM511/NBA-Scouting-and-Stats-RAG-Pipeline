@@ -34,7 +34,7 @@ const SUGGESTIONS = [
     icon: Layers,
     label: "Hybrid",
     tone: "violet" as const,
-    q: "Which guards shooting above 40% from three are getting praised for off-ball movement?",
+    q: "Which guards shooting >40% from three move best off-ball?",
   },
 ];
 
@@ -153,7 +153,7 @@ export function Hero({ onSuggestion, runKey = 0 }: Props) {
               <ToneIcon tone={s.tone}>
                 <s.icon className="h-3.5 w-3.5" />
               </ToneIcon>
-              <span className="max-w-[260px] truncate">{s.q}</span>
+              <span className="whitespace-nowrap">{s.q}</span>
               <ArrowUpRight className="h-3.5 w-3.5 text-text-dim transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
             </motion.button>
           ))}

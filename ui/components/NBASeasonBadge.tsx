@@ -38,7 +38,7 @@ export function NBASeasonBadge() {
           width={64}
           height={92}
           className="h-full w-auto object-cover object-center"
-          style={{ transform: "scale(1.28)", transformOrigin: "center" }}
+          style={{ transform: "scale(1.05)", transformOrigin: "center" }}
           priority
         />
       </div>
