@@ -38,11 +38,16 @@ logger = logging.getLogger(__name__)
 
 
 class Model(StrEnum):
-    """Anthropic model IDs used in this project. Cascade order in `CASCADE`."""
+    """Anthropic model IDs used in this project. Cascade order in `CASCADE`.
+
+    Dropped one generation from the project default (4.6/4.7) to (4.5/4.6)
+    so the demo runs on any account that still has only generally-available
+    models, not the bleeding edge. Pricing is unchanged at this tier band.
+    """
 
     HAIKU = "claude-haiku-4-5-20251001"
-    SONNET = "claude-sonnet-4-6"
-    OPUS = "claude-opus-4-7"
+    SONNET = "claude-sonnet-4-5"
+    OPUS = "claude-opus-4-6"
 
 
 # Cheapest → most expensive. The cascade walks this list.

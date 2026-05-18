@@ -12,7 +12,7 @@ A hybrid RAG system for the 2025-26 NBA season that answers three kinds of quest
 2. **Prose** (qualitative): "How do scouts grade Wemby's defensive instincts?" → vector retrieval on articles.
 3. **Hybrid**: "Which guards shooting above 40% from three are getting praised for off-ball movement?" → SQL filter, then vector search inside the filtered set.
 
-A Claude Sonnet 4.6 router decides which path each question takes. Coverage: all ~500 active players, deep-dive enrichment on the top 30, daily refresh during the playoffs (Conference Finals start 2026-05-18; NBA Finals start 2026-06-03).
+A Claude Sonnet 4.5 router decides which path each question takes. Coverage: all ~500 active players, deep-dive enrichment on the top 30, daily refresh during the playoffs (Conference Finals start 2026-05-18; NBA Finals start 2026-06-03).
 
 ## Stack
 
@@ -21,7 +21,7 @@ A Claude Sonnet 4.6 router decides which path each question takes. Coverage: all
 - `nba_api` for stats; `requests` + BeautifulSoup for articles; `requests` against Reddit's public `.json` endpoints for r/nba (no OAuth — see `.env.example`)
 - Voyage AI `voyage-3-large` (1024-dim) embeddings
 - Cohere Rerank 3.5
-- Anthropic Claude: Sonnet 4.6 for router and text-to-SQL, Opus 4.7 for synthesis, Haiku 4.5 for cheap pre-checks (model cascade)
+- Anthropic Claude: Sonnet 4.5 for router and text-to-SQL, Opus 4.6 for synthesis, Haiku 4.5 for cheap pre-checks (model cascade)
 - Braintrust for tracing and evals (stratified across stats / prose / hybrid routes)
 - Next.js 15 (App Router) + shadcn/ui + Tailwind for the UI, Framer Motion for transitions, Visx for the shot heatmap
 
@@ -44,7 +44,7 @@ These are non-negotiable. The `block-secrets.sh` hook and the `security-reviewer
 4. **Per-query token cap: 8K input, 2K output.** Anything over the cap returns a clear error. Centralized in `src/guardrails.py`.
 5. **Per-session cost ceiling: $0.50.** Track cost per user session (or per IP for the public demo). Soft block when hit.
 6. **Aggregate cost circuit breaker.** If total project cost in the last hour passes $5, return a maintenance message and page the operator.
-7. **Model cascade.** Try Haiku 4.5 first. Escalate to Sonnet 4.6 only when Haiku declines or fails validation. Reach Opus 4.7 only for genuinely hard synthesis.
+7. **Model cascade.** Try Haiku 4.5 first. Escalate to Sonnet 4.5 only when Haiku declines or fails validation. Reach Opus 4.6 only for genuinely hard synthesis.
 8. **Text-to-SQL is read-only.** Generated SQL goes through the `sql-reviewer` agent. Rejects: any DDL, any DML, any unparameterized string concatenation, any query that does not use the schema indexes.
 9. **Never put credentials in system prompts.** System prompts are exfiltratable (LLM07). Keys belong in env vars, not in prompt text.
 
