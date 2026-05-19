@@ -312,14 +312,32 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 # --------------------------------------------------------------------------- #
 
 
+# The single production Vercel origin for this project. Pinned here as a
+# guaranteed safety-net for CORS so a misconfigured (or wiped) Render env
+# var doesn't break the live demo. The ALLOWED_ORIGINS env var still wins
+# when set — this constant is appended below.
+PRODUCTION_ORIGIN = "https://nba-stats-rag-pipeline.vercel.app"
+
+
 def _origins() -> list[str]:
     raw = os.environ.get("ALLOWED_ORIGINS", "")
     if raw.strip():
-        return [o.strip() for o in raw.split(",") if o.strip()]
-    # Next.js dev server falls forward through 3000..3009 when ports are busy,
-    # so the allowlist covers the range to keep `npm run dev` painless.
-    ports = range(3000, 3010)
-    return [f"http://{host}:{p}" for host in ("localhost", "127.0.0.1") for p in ports]
+        base = [o.strip() for o in raw.split(",") if o.strip()]
+    else:
+        # Next.js dev server falls forward through 3000..3009 when ports are
+        # busy, so the allowlist covers the range to keep `npm run dev`
+        # painless.
+        ports = range(3000, 3010)
+        base = [
+            f"http://{host}:{p}"
+            for host in ("localhost", "127.0.0.1")
+            for p in ports
+        ]
+    # Always include the production Vercel URL so the public demo can reach
+    # the API regardless of whether the runtime env var was set correctly.
+    if PRODUCTION_ORIGIN not in base:
+        base.append(PRODUCTION_ORIGIN)
+    return base
 
 
 app = FastAPI(
