@@ -251,6 +251,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # the module without an API key don't hit the network.
     bt_init()
 
+    # Surface the loaded CORS allow-list on startup so a misconfigured
+    # ALLOWED_ORIGINS env var is visible in the deploy logs (no need to
+    # guess from preflight 400s). One line per startup.
+    logger.info("CORS allow_origins=%s", _origins())
+
     # Surface the active guardrail values on startup so it's obvious whether
     # a .env edit was picked up (Settings is lru_cached for the life of the
     # process — the only way to change these is to restart).
